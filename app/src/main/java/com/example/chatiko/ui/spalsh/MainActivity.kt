@@ -30,6 +30,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.chatiko.ui.tutorial.HomeScreen
+import kotlinx.coroutines.delay
 
 
 class MainActivity : ComponentActivity() {
@@ -38,14 +44,35 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ChatikoTheme {
-                SplashScreen()
+                val navController = rememberNavController()
+
+                NavHost(
+                    navController = navController,
+                    startDestination = "splash"
+                ) {
+                    composable("splash") {
+                        SplashScreen(navController)
+                    }
+
+                    composable("home") {
+                        HomeScreen()
+                    }
+                }
             }
         }
+
     }
 }
-
 @Composable
-fun SplashScreen() {
+fun SplashScreen(navController: NavController) {
+
+    LaunchedEffect(Unit) {
+        delay(2000)
+        navController.navigate("home") {
+            popUpTo("splash") { inclusive = true }
+        }
+    }
+
     val transition = rememberInfiniteTransition()
 
     val scale by transition.animateFloat(
@@ -132,13 +159,3 @@ fun SplashScreen() {
         )
     }
 }
-
-
-@Preview(showBackground = true)
-@Composable
-fun SplashPreview() {
-    ChatikoTheme {
-        SplashScreen()
-    }
-}
-
