@@ -34,6 +34,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.chatiko.ui.LoginScreen
 import com.example.chatiko.ui.tutorial.HomeScreen
 import kotlinx.coroutines.delay
 
@@ -55,7 +56,11 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable("home") {
-                        HomeScreen()
+                        HomeScreen(navController)
+                    }
+
+                    composable("login") {
+                        LoginScreen()
                     }
                 }
             }

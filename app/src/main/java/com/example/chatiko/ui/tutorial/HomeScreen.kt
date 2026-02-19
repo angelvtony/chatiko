@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import coil.compose.rememberImagePainter
 import com.example.chatiko.R
 
@@ -51,7 +52,7 @@ val screens = listOf(
 )
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(navController: NavController) {
     // State for HorizontalPager (keeps track of current page)
     val pagerState = rememberPagerState(0){3}
 
@@ -82,7 +83,10 @@ fun HomeScreen() {
         // Button at the bottom with gradient background
         Button(
             colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
-            onClick = { /* Handle Button Click */ },
+            onClick = {
+                navController.navigate("login") {
+                popUpTo("home") { inclusive = true }
+            }},
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
@@ -208,7 +212,7 @@ fun IndicatorDot(isSelected: Boolean) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewHomeScreen() {
-    HomeScreen()
+//    HomeScreen()
 }
 
 
