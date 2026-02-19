@@ -58,5 +58,12 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation("androidx.compose.animation:animation:1.7.0") // Or later version
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("com.google.accompanist:accompanist-pager:0.24.13-rc")
+    implementation ("androidx.compose.foundation:foundation:1.3.0")
+    implementation("io.coil-kt:coil-compose:2.2.2")
+// Add this if you're using Jetpack Compose 1.3.0+
+
+
 
 }
