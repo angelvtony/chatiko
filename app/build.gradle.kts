@@ -62,6 +62,7 @@ dependencies {
     implementation("com.google.accompanist:accompanist-pager:0.24.13-rc")
     implementation ("androidx.compose.foundation:foundation:1.3.0")
     implementation("io.coil-kt:coil-compose:2.2.2")
+    implementation("androidx.compose.material:material-icons-extended")
 // Add this if you're using Jetpack Compose 1.3.0+
 
 
