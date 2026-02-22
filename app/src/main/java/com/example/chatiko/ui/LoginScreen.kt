@@ -1,7 +1,12 @@
 package com.example.chatiko.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -15,6 +20,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.chatiko.ui.custom.CurvedBottomShape
+import com.example.chatiko.ui.custom.PandaIllustration
 
 @Composable
 fun LoginScreen() {
@@ -29,9 +36,8 @@ fun LoginScreen() {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(0.7f) // Takes up slightly more than half the screen
+                    .weight(0.7f)
             ) {
-                // Curved Background
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -39,9 +45,9 @@ fun LoginScreen() {
                         .background(
                             brush = Brush.linearGradient(
                                 colors = listOf(
-                                    Color(0xFFD6F0FF), // Light cyan
-                                    Color(0xFFEFE6FF), // Light purple
-                                    Color(0xFFFEF3D2)  // Light yellow
+                                    Color(0xFFD6F0FF),
+                                    Color(0xFFEFE6FF),
+                                    Color(0xFFFEF3D2)
                                 ),
                                 start = Offset(0f, 0f),
                                 end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
@@ -49,17 +55,14 @@ fun LoginScreen() {
                         )
                 )
 
-                // Canvas Panda Illustration (No assets needed!)
                 PandaIllustration(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        // Pushed slightly down so the bottom perfectly rests on the background edge
                         .padding(bottom = 16.dp)
                         .size(220.dp)
                 )
             }
 
-            // Bottom Section: Typography
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -91,6 +94,68 @@ fun LoginScreen() {
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     lineHeight = 26.sp
+                )
+
+                Button(
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
+                    onClick = {},
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color(0xFF00C6FF), Color(0xFF6A82FB))
+                            ),
+                            shape = MaterialTheme.shapes.extraLarge
+                        ),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    Text(
+                        text = "Continue Anonymously",
+                        color = Color.White
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .clip(MaterialTheme.shapes.extraLarge)
+                        .border(
+                            width = 1.dp,
+                            color = Color.Gray,
+                            shape = MaterialTheme.shapes.extraLarge
+                        )
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color(0xFFFFFFFF), Color(0xFFFCFCFC))
+                            ),
+                            shape = MaterialTheme.shapes.extraLarge
+                        )
+                        .clickable { }
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Text(
+                            text = "Continue with Google",
+                            color = Color.Black
+                        )
+                    }
+                }
+                Text(
+                    text = "Your location and data are never shared without your consent",
+                    modifier = Modifier.padding(0.dp,28.dp,0.dp,0.dp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Light,
+                    color = Color(0xFF111111),
+                    letterSpacing = (-0.5).sp
                 )
             }
         }
