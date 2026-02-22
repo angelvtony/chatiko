@@ -1,14 +1,15 @@
-package com.example.chatiko.ui
+package com.example.chatiko.ui.custom
 
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 
 class CurvedBottomShape : Shape {
     override fun createOutline(
-        size: androidx.compose.ui.geometry.Size,
+        size: Size,
         layoutDirection: LayoutDirection,
         density: Density
     ): Outline {
@@ -25,4 +26,3 @@ class CurvedBottomShape : Shape {
         return Outline.Generic(path)
     }
 }
-

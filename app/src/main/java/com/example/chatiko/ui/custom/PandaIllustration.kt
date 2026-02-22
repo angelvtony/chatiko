@@ -1,4 +1,4 @@
-package com.example.chatiko.ui
+package com.example.chatiko.ui.custom
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
