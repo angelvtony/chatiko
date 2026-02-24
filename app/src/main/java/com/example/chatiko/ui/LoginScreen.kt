@@ -25,7 +25,7 @@ import com.example.chatiko.ui.custom.CurvedBottomShape
 import com.example.chatiko.ui.custom.PandaIllustration
 
 @Composable
-fun LoginScreen(navController: NavController) {
+fun LoginScreen(navController: NavController?) {
     Box(
         Modifier.fillMaxSize()
     ) {
@@ -100,7 +100,7 @@ fun LoginScreen(navController: NavController) {
                 Button(
                     colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
                     onClick = {
-                        navController.navigate("preference") {
+                        navController?.navigate("preference") {
                             popUpTo("login") { inclusive = true }
                         }
                     },
@@ -170,5 +170,5 @@ fun LoginScreen(navController: NavController) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewLoginScreen() {
-//    LoginScreen()
+    LoginScreen(null)
 }
