@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 
 data class Mood(
     val name: String,
@@ -57,7 +58,7 @@ data class Mood(
 )
 
 @Composable
-fun PreferenceScreen() {
+fun PreferenceScreen(navController: NavController?) {
     var selectedMood by remember { mutableStateOf<Mood?>(null) }
     val moods = listOf(
         Mood(
@@ -136,9 +137,9 @@ fun PreferenceScreen() {
         Button(
             colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
             onClick = {
-//                navController.navigate("preference") {
-//                    popUpTo("login") { inclusive = true }
-//                }
+                navController?.navigate("chatscreen") {
+                    popUpTo("preference") { inclusive = true }
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -226,5 +227,5 @@ fun MoodItem(
 @Preview(showBackground = true)
 @Composable
 fun PreviewPreferenceScreen() {
-    PreferenceScreen()
+    PreferenceScreen(null)
 }

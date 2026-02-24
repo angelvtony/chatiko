@@ -52,7 +52,7 @@ val screens = listOf(
 )
 
 @Composable
-fun HomeScreen(navController: NavController) {
+fun HomeScreen(navController: NavController?) {
     // State for HorizontalPager (keeps track of current page)
     val pagerState = rememberPagerState(0){3}
 
@@ -84,7 +84,7 @@ fun HomeScreen(navController: NavController) {
         Button(
             colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
             onClick = {
-                navController.navigate("login") {
+                navController?.navigate("login") {
                 popUpTo("home") { inclusive = true }
             }},
             modifier = Modifier
@@ -212,7 +212,7 @@ fun IndicatorDot(isSelected: Boolean) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewHomeScreen() {
-//    HomeScreen()
+    HomeScreen(null)
 }
 
 
