@@ -137,7 +137,7 @@ fun PreferenceScreen(navController: NavController?) {
         Button(
             colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
             onClick = {
-                navController?.navigate("chatscreen") {
+                navController?.navigate("nearby_vibes") {
                     popUpTo("preference") { inclusive = true }
                 }
             },

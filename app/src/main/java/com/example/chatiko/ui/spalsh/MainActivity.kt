@@ -39,6 +39,8 @@ import com.example.chatiko.ui.chat.ChatScreen
 import com.example.chatiko.ui.preferences.PreferenceScreen
 import com.example.chatiko.ui.settings.SettingsScreen
 import com.example.chatiko.ui.tutorial.HomeScreen
+import com.example.chatiko.ui.map.MapScreen
+import com.example.chatiko.ui.vibes.NearbyVibesScreen
 import kotlinx.coroutines.delay
 
 
@@ -74,8 +76,12 @@ class MainActivity : ComponentActivity() {
                         ChatScreen(navController)
                     }
 
-                    composable("settingscreen") {
-                        SettingsScreen()
+                    composable("nearby_vibes") {
+                        NearbyVibesScreen(navController)
+                    }
+
+                    composable("map") {
+                        MapScreen(navController)
                     }
                 }
             }
