@@ -1,6 +1,16 @@
 package com.example.chatiko.ui.vibes
 
 import android.location.Location
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,13 +26,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import kotlin.math.cos
+import kotlin.math.sin
 
 // 7. Dummy data structure
 data class NearbyVibeUser(
@@ -47,7 +62,6 @@ fun NearbyVibesScreen(
 
     val moods = viewModel.moods
 
-    // Mock user location (only for distance display in card)
     val myLat = 1.3521
     val myLng = 103.8198
 
@@ -61,27 +75,23 @@ fun NearbyVibesScreen(
                     .padding(top = 16.dp, bottom = 8.dp)
             ) {
 
-                // Header
                 Column(modifier = Modifier.padding(horizontal = 24.dp)) {
 
                     Text(
                         text = "$selectedMood Vibe Nearby ${getEmoji(selectedMood)}",
                         fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                        fontWeight = FontWeight.Bold
                     )
 
                     Text(
                         text = "${filteredUsers.size} people nearby",
                         fontSize = 14.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(top = 4.dp)
+                        color = Color.Gray
                     )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Filter Chips
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -92,15 +102,11 @@ fun NearbyVibesScreen(
                         FilterChip(
                             label = mood,
                             isSelected = mood == selectedMood,
-                            onClick = {
-                                viewModel.selectMood(mood)
-                            }
+                            onClick = { viewModel.selectMood(mood) }
                         )
 
                     }
-
                 }
-
             }
         }
     ) { padding ->
@@ -113,6 +119,14 @@ fun NearbyVibesScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+
+            item {
+
+                NearbyRadar(
+                    users = filteredUsers
+                )
+
+            }
 
             items(filteredUsers) { user ->
 
@@ -251,10 +265,20 @@ fun FilterChip(
     onClick: () -> Unit
 ) {
 
+    val bgColor by animateColorAsState(
+        if (isSelected) Color(0xFF6A82FB) else Color(0xFFF1F3FD),
+        label = ""
+    )
+
+    val textColor by animateColorAsState(
+        if (isSelected) Color.White else Color(0xFF6A82FB),
+        label = ""
+    )
+
     Surface(
         onClick = onClick,
+        color = bgColor,
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) Color(0xFF6A82FB) else Color(0xFFF1F3FD),
         modifier = Modifier.height(40.dp)
     ) {
 
@@ -265,15 +289,88 @@ fun FilterChip(
 
             Text(
                 text = "${getEmoji(label)} $label",
-                color = if (isSelected) Color.White else Color(0xFF6A82FB),
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
+                color = textColor,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun NearbyRadar(users: List<NearbyVibeUser>) {
+
+    val infiniteTransition = rememberInfiniteTransition()
+
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing)
+        ), label = ""
+    )
+
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing)
+        ), label = ""
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+            .background(Color.White, RoundedCornerShape(20.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+
+            val radius = size.minDimension / 2
+
+            drawCircle(
+                color = Color(0xFF6A82FB).copy(alpha = 0.2f),
+                radius = radius
             )
 
+            drawCircle(
+                color = Color(0xFF6A82FB).copy(alpha = 0.1f),
+                radius = radius * pulse
+            )
+
+            rotate(rotation) {
+                drawLine(
+                    color = Color(0xFF6A82FB),
+                    start = center,
+                    end = Offset(center.x, 0f),
+                    strokeWidth = 6f
+                )
+            }
         }
 
-    }
+        users.take(6).forEachIndexed { index, user ->
 
+            val angle = (index * 60).toFloat()
+            val distance = 60 + (index * 15)
+
+            val x = cos(Math.toRadians(angle.toDouble())) * distance
+            val y = sin(Math.toRadians(angle.toDouble())) * distance
+
+            Box(
+                modifier = Modifier
+                    .offset(x.dp, y.dp)
+                    .size(10.dp)
+                    .background(user.color, CircleShape)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .background(Color(0xFF6A82FB), CircleShape)
+        )
+    }
 }
 
 fun getEmoji(mood: String): String {
