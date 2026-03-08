@@ -31,9 +31,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.navigation.NavController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.chatiko.ui.LoginScreen
 import com.example.chatiko.ui.chat.ChatScreen
 import com.example.chatiko.ui.preferences.PreferenceScreen
@@ -71,8 +73,12 @@ class MainActivity : ComponentActivity() {
                         PreferenceScreen(navController)
                     }
 
-                    composable("chatscreen") {
-                        ChatScreen(navController)
+                    composable(
+                        route = "chatscreen/{userId}",
+                        arguments = listOf(navArgument("userId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val userId = backStackEntry.arguments?.getString("userId")
+                        ChatScreen(navController, userId ?: "")
                     }
 
                     composable("nearby_vibes") {

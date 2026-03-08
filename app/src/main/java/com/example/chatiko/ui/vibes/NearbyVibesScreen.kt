@@ -12,6 +12,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -121,11 +122,12 @@ fun NearbyVibesScreen(
         ) {
 
             item {
-
                 NearbyRadar(
-                    users = filteredUsers
+                    users = filteredUsers,
+                    onUserClick = { user ->
+                        navController.navigate("chatscreen/${user.id}")
+                    }
                 )
-
             }
 
             items(filteredUsers) { user ->
@@ -297,7 +299,10 @@ fun FilterChip(
 }
 
 @Composable
-fun NearbyRadar(users: List<NearbyVibeUser>) {
+fun NearbyRadar(
+    users: List<NearbyVibeUser>,
+    onUserClick: (NearbyVibeUser) -> Unit
+) {
 
     val infiniteTransition = rememberInfiniteTransition()
 
@@ -326,7 +331,6 @@ fun NearbyRadar(users: List<NearbyVibeUser>) {
     ) {
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-
             val radius = size.minDimension / 2
 
             drawCircle(
@@ -349,10 +353,19 @@ fun NearbyRadar(users: List<NearbyVibeUser>) {
             }
         }
 
+        // Center user
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .background(Color(0xFF6A82FB), CircleShape)
+        )
+
+        // Nearby user dots
         users.take(6).forEachIndexed { index, user ->
 
-            val angle = (index * 60).toFloat()
-            val distance = 60 + (index * 15)
+            // Simple angle-distance placement
+            val angle = (index * 60).toFloat() // degrees
+            val distance = 60 + (index * 15)   // px offset
 
             val x = cos(Math.toRadians(angle.toDouble())) * distance
             val y = sin(Math.toRadians(angle.toDouble())) * distance
@@ -360,16 +373,13 @@ fun NearbyRadar(users: List<NearbyVibeUser>) {
             Box(
                 modifier = Modifier
                     .offset(x.dp, y.dp)
-                    .size(10.dp)
-                    .background(user.color, CircleShape)
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(user.color)
+                    .border(1.dp, Color.White, CircleShape)
+                    .clickable { onUserClick(user) } // <-- tap callback
             )
         }
-
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .background(Color(0xFF6A82FB), CircleShape)
-        )
     }
 }
 

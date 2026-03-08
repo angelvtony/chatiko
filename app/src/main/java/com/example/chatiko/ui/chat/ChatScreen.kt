@@ -35,6 +35,7 @@ import com.example.chatiko.ui.chat.viewmodel.ChatViewModel
 @Composable
 fun ChatScreen(
     navController: NavController?,
+    userId: String,
     viewModel: ChatViewModel = viewModel()
 ) {
 
@@ -298,8 +299,8 @@ fun MessageInputBar(
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewHomeScreen() {
-    ChatScreen(null)
-}
+//@Preview(showBackground = true)
+//@Composable
+//fun PreviewHomeScreen() {
+//    ChatScreen(null)
+//}
