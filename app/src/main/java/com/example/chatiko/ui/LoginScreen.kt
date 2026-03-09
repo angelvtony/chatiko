@@ -100,7 +100,7 @@ fun LoginScreen(navController: NavController?) {
                 Button(
                     colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
                     onClick = {
-                        navController?.navigate("preference") {
+                        navController?.navigate("registration") {
                             popUpTo("login") { inclusive = true }
                         }
                     },
