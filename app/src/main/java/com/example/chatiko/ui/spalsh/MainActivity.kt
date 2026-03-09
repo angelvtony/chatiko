@@ -38,6 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.chatiko.ui.LoginScreen
 import com.example.chatiko.ui.chat.ChatScreen
+import com.example.chatiko.ui.login.LoginScreenV1
 import com.example.chatiko.ui.preferences.PreferenceScreen
 import com.example.chatiko.ui.registration.RegistrationScreen
 import com.example.chatiko.ui.settings.SettingsScreen
@@ -72,6 +73,10 @@ class MainActivity : ComponentActivity() {
 
                     composable("registration") {
                         RegistrationScreen(navController)
+                    }
+
+                    composable("loginV1") {
+                        LoginScreenV1(navController)
                     }
 
                     composable("preference") {
