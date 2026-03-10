@@ -21,8 +21,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.chatiko.ui.custom.CurvedBottomShape
-import com.example.chatiko.ui.custom.PandaIllustration
+import com.example.chatiko.custom.CurvedBottomShape
+import com.example.chatiko.custom.PandaIllustration
 
 @Composable
 fun LoginScreen(navController: NavController?) {
@@ -100,9 +100,7 @@ fun LoginScreen(navController: NavController?) {
                 Button(
                     colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
                     onClick = {
-                        navController?.navigate("registration") {
-                            popUpTo("login") { inclusive = true }
-                        }
+                        navController?.navigate("registration")
                     },
                     modifier = Modifier
                         .fillMaxWidth()
