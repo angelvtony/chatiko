@@ -1,5 +1,6 @@
 package com.example.chatiko.ui.preferences
 
+import android.content.Context
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,9 +47,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 
 data class Mood(
@@ -58,7 +60,7 @@ data class Mood(
 )
 
 @Composable
-fun PreferenceScreen(navController: NavController?) {
+fun PreferenceScreen(navController: NavController, viewModel: PreferencesViewModel = viewModel()) {
     var selectedMood by remember { mutableStateOf<Mood?>(null) }
     val moods = listOf(
         Mood(
@@ -134,11 +136,16 @@ fun PreferenceScreen(navController: NavController?) {
                 )
             }
         }
+        val context = LocalContext.current
+        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val jwtToken = sharedPref.getString("jwt_token", null) // default null if not stored
         Button(
             colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent),
             onClick = {
-                navController?.navigate("nearby_vibes") {
-                    popUpTo("preference") { inclusive = true }
+                selectedMood?.let { mood ->
+                    val preference = PreferenceModel(mood.name)
+                    viewModel.savePreferences(jwtToken, preference)
+                    navController.navigate("nearby_vibes")
                 }
             },
             modifier = Modifier
@@ -224,8 +231,8 @@ fun MoodItem(
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewPreferenceScreen() {
-    PreferenceScreen(null)
-}
+//@Preview(showBackground = true)
+//@Composable
+//fun PreviewPreferenceScreen() {
+//    PreferenceScreen(null)
+//}

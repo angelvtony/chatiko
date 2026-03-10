@@ -13,6 +13,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -37,7 +38,9 @@ fun LoginScreenV1(
         when (loginState) {
 
             is LoginUiState.Success -> {
-                navController?.navigate("preference")
+                navController?.navigate("preference"){
+                    popUpTo("loginV1") { inclusive = true }
+                }
             }
 
             is LoginUiState.Error -> {
@@ -81,8 +84,9 @@ fun LoginScreenV1(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        val context = LocalContext.current
         Button(
-            onClick = { loginViewModel.login(username, password) },
+            onClick = { loginViewModel.login( context, username, password) },
             modifier = Modifier.fillMaxWidth()
         ) {
 

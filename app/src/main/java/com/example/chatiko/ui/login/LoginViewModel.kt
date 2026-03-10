@@ -1,5 +1,6 @@
 package com.example.chatiko.ui.login
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.chatiko.network.RetrofitClient
@@ -15,13 +16,19 @@ class LoginViewModel : ViewModel() {
     private val _loginState = MutableStateFlow<LoginUiState>(LoginUiState.Idle)
     val loginState: StateFlow<LoginUiState> = _loginState
 
-    fun login(username: String, password: String) {
+    fun login(context: Context, username: String, password: String) {
         viewModelScope.launch {
             _loginState.value = LoginUiState.Loading // Show loading state
             try {
                 val response = RetrofitClient.instance.login(LoginRequest(username, password))
                 if (!response.token.isNullOrEmpty()) {
                     _loginState.value = LoginUiState.Success(response.token)
+
+                    val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                    sharedPref.edit().putString("jwt_token", response.token).apply()
+
+// Retrieve token
+                    val token = sharedPref.getString("jwt_token", null)
                 } else {
                     _loginState.value = LoginUiState.Error(response.error ?: "Login failed")
                 }
