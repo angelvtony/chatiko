@@ -1,68 +1,120 @@
 package com.example.chatiko.ui.vibes
 
 import android.location.Location
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import com.example.chatiko.network.LocationHelper
+import com.example.chatiko.network.RegistrationServices
+import com.example.chatiko.ui.registration.User
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
-class NearbyVibesViewModel : ViewModel() {
+class NearbyVibesViewModel(
+    private val api: RegistrationServices?,
+    private val userId: String?,
+    private val locationHelper: LocationHelper?,
+    private val initialMood: String? = null
+) : ViewModel() {
 
-    private val myLat = 1.3521
-    private val myLng = 103.8198
-
-    // Mood Filter
-    private val _selectedMood = MutableStateFlow("Happy")
+    // Selected mood
+    private val _selectedMood = MutableStateFlow(initialMood?:"")
     val selectedMood: StateFlow<String> = _selectedMood
 
+    // All moods
     val moods = listOf("Happy", "Sad", "Stressed", "Vibing", "Bored", "Working", "Idle", "Normal")
 
-    // Dummy users
-    private val allUsers = listOf(
-        NearbyVibeUser("1","User_7af","Happy","☕",1.3530,103.8205,true,Color(0xFF8B4513)),
-//        NearbyVibeUser("2","User_847","Coffee","☕",1.3510,103.8150,true,Color(0xFF6F4E37)),
-//        NearbyVibeUser("3","User_192","Study","📚",1.3580,103.8300,false,Color(0xFF4682B4)),
-//        NearbyVibeUser("4","User_k21","Gaming","🎮",1.3450,103.8100,true,Color(0xFF32CD32)),
-//        NearbyVibeUser("5","User_m90","Chill","🏖️",1.3600,103.8250,true,Color(0xFF40E0D0)),
-//        NearbyVibeUser("6","User_v04","Coffee","☕",1.3550,103.8220,false,Color(0xFFD2691E)),
-//        NearbyVibeUser("7","User_x55","Study","📚",1.3480,103.8180,true,Color(0xFF4169E1)),
-//        NearbyVibeUser("8","User_p88","Gaming","🎮",1.3505,103.8210,true,Color(0xFF228B22)),
-//        NearbyVibeUser("9","User_q12","Chill","🧘",1.3540,103.8190,false,Color(0xFF87CEEB)),
-//        NearbyVibeUser("10","User_z33","Coffee","☕",1.3620,103.8400,true,Color(0xFF5D4037))
-    )
+    // Current device location
+     var _myLat: Double = 0.0
+     var _myLng: Double = 0.0
 
-    // Filtered Users
-    val filteredUsers: StateFlow<List<NearbyVibeUser>> =
-        selectedMood.map { mood ->
+    // Raw nearby users from API
+    private val _nearbyUsers = MutableStateFlow<List<NearbyVibeUser>>(emptyList())
 
-            allUsers
-                .filter { it.mood == mood }
-                .sortedBy { user ->
+    // Filtered users based on selected mood
+    val filteredUsers: StateFlow<List<NearbyVibeUser>> = combine(_nearbyUsers, _selectedMood) { users, mood ->
+        users
+            .filter { it.mood == mood } // only keep users with matching mood
+            .sortedBy { user ->
+                val results = FloatArray(1)
+                Location.distanceBetween(_myLat, _myLng, user.latitude, user.longitude, results)
+                results[0]
+            }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-                    val results = FloatArray(1)
-
-                    Location.distanceBetween(
-                        myLat,
-                        myLng,
-                        user.latitude,
-                        user.longitude,
-                        results
-                    )
-
-                    results[0]
-                }
-
-        }.stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            emptyList()
-        )
-
+    // Select a mood
     fun selectMood(mood: String) {
         _selectedMood.value = mood
+    }
+
+    // Refresh users and include current device location
+    fun refreshNearbyUsers() {
+        viewModelScope.launch {
+            try {
+                // 1️⃣ Get current device location
+                val location = locationHelper?.getCurrentLocation()
+                if (location != null) {
+                    _myLat = location.latitude
+                    _myLng = location.longitude
+
+                    // 2️⃣ Update current user location on backend
+                    api?.updateLocation(
+                        userId,
+                        User(
+                            username = null,
+                            email = null,
+                            password = null,
+                            latitude = _myLat,
+                            longitude = _myLng,
+                            isOnline = true
+                        )
+                    )
+
+                    // 3️⃣ Fetch nearby users from backend
+                    val nearby = api?.getNearbyUsers(_myLat, _myLng) ?: emptyList()
+
+                    // 4️⃣ Add current user to the list
+                    val currentUser = NearbyVibeUser(
+                        id = userId,
+                        username = "You",
+                        mood = _selectedMood.value,
+                        moodEmoji = "😊",
+                        latitude = _myLat,
+                        longitude = _myLng,
+                        isOnline = true,
+                        color = Color(0xFF6A82FB)
+                    )
+
+                    // Filter out null users just in case API returns incomplete data
+                    val safeNearby = nearby.filterNotNull()
+
+                    _nearbyUsers.value = listOf(currentUser) + safeNearby
+
+                    Log.d("NearbyVibesVM", "Nearby users refreshed: ${_nearbyUsers.value.size}")
+                } else {
+                    Log.e("NearbyVibesVM", "Device location is null")
+                }
+            } catch (e: Exception) {
+                Log.e("NearbyVibesVM", "Error refreshing nearby users", e)
+            }
+        }
+    }
+}
+
+// Factory for creating ViewModel with parameters
+class NearbyVibesViewModelFactory(
+    private val api: RegistrationServices?,
+    private val userId: String?,
+    private val locationHelper: LocationHelper?,
+    private val initialMood: String?
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(NearbyVibesViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return NearbyVibesViewModel(api, userId, locationHelper,initialMood) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

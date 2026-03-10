@@ -99,8 +99,12 @@ class MainActivity : ComponentActivity() {
                         ChatScreen(navController, userId ?: "")
                     }
 
-                    composable("nearby_vibes") {
-                        NearbyVibesScreen(navController)
+                    composable(
+                        "nearby_vibes/{selectedMood}",
+                        arguments = listOf(navArgument("selectedMood") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val selectedMood = backStackEntry.arguments?.getString("selectedMood")
+                        NearbyVibesScreen(navController, null, null, initialMood = selectedMood)
                     }
                 }
             }

@@ -1,6 +1,10 @@
 package com.example.chatiko.ui.vibes
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.location.Location
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
@@ -32,17 +36,21 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.chatiko.network.LocationHelper
+import com.example.chatiko.network.RegistrationServices
 import kotlin.math.cos
 import kotlin.math.sin
 
 // 7. Dummy data structure
 data class NearbyVibeUser(
-    val id: String,
+    val id: String?,
     val username: String,
     val mood: String,
     val moodEmoji: String,
@@ -53,65 +61,61 @@ data class NearbyVibeUser(
 )
 
 @Composable
-fun NearbyVibesScreen(
-    navController: NavController,
-    viewModel: NearbyVibesViewModel = viewModel()
-) {
+fun NearbyVibesScreen(navController: NavController, api: RegistrationServices?, userId: String?,initialMood: String?) {
+    val context = LocalContext.current
+    val locationHelper = remember { LocationHelper(context) }
+
+    val viewModel: NearbyVibesViewModel = viewModel(
+        factory = NearbyVibesViewModelFactory(api, userId, locationHelper,initialMood)
+    )
+
+    // Permission launcher
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.refreshNearbyUsers()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        when {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // Already granted
+            }
+            else -> {
+                launcher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+        }
+    }
 
     val selectedMood by viewModel.selectedMood.collectAsState()
     val filteredUsers by viewModel.filteredUsers.collectAsState()
-
     val moods = viewModel.moods
 
-    val myLat = 1.3521
-    val myLng = 103.8198
+    // Refresh nearby users once permission is granted
+    LaunchedEffect(Unit) {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) viewModel.refreshNearbyUsers()
+    }
 
+    // Scaffold + UI
     Scaffold(
         topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .statusBarsPadding()
-                    .padding(top = 16.dp, bottom = 8.dp)
-            ) {
-
-                Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-
-                    Text(
-                        text = "$selectedMood Vibe Nearby ${getEmoji(selectedMood)}",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Text(
-                        text = "${filteredUsers.size} people nearby",
-                        fontSize = 14.sp,
-                        color = Color.Gray
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-
-                    items(moods) { mood ->
-
-                        FilterChip(
-                            label = mood,
-                            isSelected = mood == selectedMood,
-                            onClick = { viewModel.selectMood(mood) }
-                        )
-
-                    }
-                }
-            }
+            NearbyVibesTopBar(
+                selectedMood = selectedMood,
+                nearbyCount = filteredUsers.size,
+                moods = moods,
+                viewModel = viewModel
+            )
         }
     ) { padding ->
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -120,7 +124,6 @@ fun NearbyVibesScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-
             item {
                 NearbyRadar(
                     users = filteredUsers,
@@ -131,20 +134,59 @@ fun NearbyVibesScreen(
             }
 
             items(filteredUsers) { user ->
-
                 UserVibeCard(
                     user = user,
-                    myLat = myLat,
-                    myLng = myLng,
-                    onClick = {
-                        navController.navigate("chatscreen")
-                    }
+                    myLat = viewModel._myLat,
+                    myLng = viewModel._myLng,
+                    onClick = { navController.navigate("chatscreen/${user.id}") }
                 )
-
             }
+        }
+    }
+}
 
+@Composable
+fun NearbyVibesTopBar(
+    selectedMood: String,
+    nearbyCount: Int,
+    moods: List<String>,
+    viewModel: NearbyVibesViewModel
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White)
+            .statusBarsPadding()
+            .padding(top = 16.dp, bottom = 8.dp)
+    ) {
+
+        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+            Text(
+                text = "$selectedMood Vibe Nearby ${getEmoji(selectedMood)}",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "$nearbyCount people nearby",
+                fontSize = 14.sp,
+                color = Color.Gray
+            )
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(moods) { mood ->
+                FilterChip(
+                    label = mood,
+                    isSelected = mood == selectedMood,
+                    onClick = { viewModel.selectMood(mood) }
+                )
+            }
+        }
     }
 }
 

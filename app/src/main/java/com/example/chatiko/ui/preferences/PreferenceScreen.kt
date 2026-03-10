@@ -145,7 +145,7 @@ fun PreferenceScreen(navController: NavController, viewModel: PreferencesViewMod
                 selectedMood?.let { mood ->
                     val preference = PreferenceModel(mood.name)
                     viewModel.savePreferences(jwtToken, preference)
-                    navController.navigate("nearby_vibes")
+                    navController.navigate("nearby_vibes/${mood.name}")
                 }
             },
             modifier = Modifier

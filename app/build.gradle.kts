@@ -69,6 +69,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+//    implementation("com.google.android.gms:play-services-location:22.3.0")
+    implementation ("com.google.android.gms:play-services-location:21.0.1")
+
 // Add this if you're using Jetpack Compose 1.3.0+
 
 
