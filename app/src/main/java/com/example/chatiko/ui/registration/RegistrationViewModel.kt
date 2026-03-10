@@ -1,5 +1,6 @@
 package com.example.chatiko.ui.registration
 
+import ads_mobile_sdk.nu
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -31,7 +32,7 @@ class RegistrationViewModel : ViewModel() {
 
         isLoading = true
 
-        val request = User(username = username, email = email, password = password)
+        val request = User(username = username, email = email, password = password,null, null,null)
         RetrofitClient.instance.registerUser(request)
             .enqueue(object : Callback<RegistrationResponse> {
                 override fun onResponse(
