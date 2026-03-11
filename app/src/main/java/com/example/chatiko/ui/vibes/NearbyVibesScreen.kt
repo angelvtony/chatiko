@@ -53,7 +53,7 @@ import kotlin.math.sin
 data class NearbyVibeUser(
     val id: String?,
     val username: String,
-    val mood: String,
+    val mood: String?,
     val moodEmoji: String,
     val latitude: Double,
     val longitude: Double,

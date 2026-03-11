@@ -1,7 +1,7 @@
 package com.example.chatiko.ui.vibes
 
 data class FetchNearbyLocationElement(
-    val _id: String? = null,
+    val id: String? = null,
     val username: String? = null,
     val email: String? = null,
     val password: String? = null,
@@ -10,5 +10,6 @@ data class FetchNearbyLocationElement(
     val __v: Long? = null,
     val isOnline: Boolean? = null,
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    val mood: String? = null
 )

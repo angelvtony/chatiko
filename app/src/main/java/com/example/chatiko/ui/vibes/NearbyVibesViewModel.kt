@@ -115,30 +115,22 @@ class NearbyVibesViewModel(
             // Fetch nearby users
             val nearby = RetrofitClient.instance.getNearbyUsers(authHeader, myLat, myLng)
 
-            val currentUser = NearbyVibeUser(
-                id = userId,
-                username = "You",
-                mood = _selectedMood.value,
-                moodEmoji = "😊",
-                latitude = myLat,
-                longitude = myLng,
-                isOnline = true
-            )
+            val nearbyUsers = nearby
+                .filter { it.id != userId } // exclude yourself
+                .map {
+                    NearbyVibeUser(
+                        id = it.id,
+                        username = it.username ?: "Unknown",
+                        mood = it.mood ?: "Normal",    // fallback if mood is missing
+                        moodEmoji = "🙂",
+                        latitude = it.latitude ?: 0.0,
+                        longitude = it.longitude ?: 0.0,
+                        isOnline = it.isOnline ?: false
+                    )
+                }
 
-            val nearbyUsers = nearby.map {
-
-                NearbyVibeUser(
-                    id = it._id,
-                    username = it.username ?: "Unknown",
-                    mood = "Happy",          // backend does not send mood yet
-                    moodEmoji = "🙂",
-                    latitude = it.latitude ?: 0.0,
-                    longitude = it.longitude ?: 0.0,
-                    isOnline = it.isOnline ?: false
-                )
-            }
-
-            _nearbyUsers.value = listOf(currentUser) + nearbyUsers
+// Update state
+            _nearbyUsers.value = nearbyUsers
 
         } catch (e: Exception) {
             Log.e("NearbyVM", "API Error", e)
