@@ -26,6 +26,7 @@ class LoginViewModel : ViewModel() {
 
                     val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
                     sharedPref.edit().putString("jwt_token", response.token).apply()
+                    sharedPref.edit().putString("userId", response.user._id).apply()
 
 // Retrieve token
                     val token = sharedPref.getString("jwt_token", null)

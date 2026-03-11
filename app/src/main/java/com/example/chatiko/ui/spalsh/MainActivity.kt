@@ -1,5 +1,6 @@
 package com.example.chatiko.ui.spalsh
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +37,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -104,7 +106,10 @@ class MainActivity : ComponentActivity() {
                         arguments = listOf(navArgument("selectedMood") { type = NavType.StringType })
                     ) { backStackEntry ->
                         val selectedMood = backStackEntry.arguments?.getString("selectedMood")
-                        NearbyVibesScreen(navController, null, null, initialMood = selectedMood)
+                        val context = LocalContext.current
+                        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+
+                        NearbyVibesScreen(navController, null, sharedPref.getString("userId", null), initialMood = selectedMood)
                     }
                 }
             }
