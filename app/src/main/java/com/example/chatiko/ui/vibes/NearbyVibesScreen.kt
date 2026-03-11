@@ -3,6 +3,7 @@ package com.example.chatiko.ui.vibes
 import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Location
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -57,16 +58,26 @@ data class NearbyVibeUser(
     val latitude: Double,
     val longitude: Double,
     val isOnline: Boolean,
-    val color: Color
 )
 
 @Composable
-fun NearbyVibesScreen(navController: NavController, api: RegistrationServices?, userId: String?,initialMood: String?) {
+fun NearbyVibesScreen(
+    navController: NavController,
+    api: RegistrationServices?,
+    userId: String?,
+    initialMood: String?
+) {
     val context = LocalContext.current
     val locationHelper = remember { LocationHelper(context) }
 
     val viewModel: NearbyVibesViewModel = viewModel(
-        factory = NearbyVibesViewModelFactory(api, userId, locationHelper,initialMood)
+        factory = NearbyVibesViewModelFactory(
+            context,
+            api,
+            userId,
+            locationHelper,
+            initialMood
+        )
     )
 
     // Permission launcher
@@ -74,36 +85,31 @@ fun NearbyVibesScreen(navController: NavController, api: RegistrationServices?, 
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            viewModel.refreshNearbyUsers()
+            Log.d("NearbyScreen", "Permission granted, starting updates")
+            viewModel.startNearbyUpdates()
+        } else {
+            Log.e("NearbyScreen", "Permission denied")
         }
     }
 
+    // Check permission once when Composable enters composition
     LaunchedEffect(Unit) {
-        when {
-            ContextCompat.checkSelfPermission(
+        if (ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                // Already granted
-            }
-            else -> {
-                launcher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-            }
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            // Already granted, start updates immediately
+            viewModel.startNearbyUpdates()
+        } else {
+            // Ask for permission
+            launcher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 
     val selectedMood by viewModel.selectedMood.collectAsState()
     val filteredUsers by viewModel.filteredUsers.collectAsState()
     val moods = viewModel.moods
-
-    // Refresh nearby users once permission is granted
-    LaunchedEffect(Unit) {
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        if (granted) viewModel.refreshNearbyUsers()
-    }
 
     // Scaffold + UI
     Scaffold(
@@ -127,6 +133,8 @@ fun NearbyVibesScreen(navController: NavController, api: RegistrationServices?, 
             item {
                 NearbyRadar(
                     users = filteredUsers,
+                    myLat = viewModel.myLat,
+                    myLng = viewModel.myLng,
                     onUserClick = { user ->
                         navController.navigate("chatscreen/${user.id}")
                     }
@@ -136,9 +144,11 @@ fun NearbyVibesScreen(navController: NavController, api: RegistrationServices?, 
             items(filteredUsers) { user ->
                 UserVibeCard(
                     user = user,
-                    myLat = viewModel._myLat,
-                    myLng = viewModel._myLng,
-                    onClick = { navController.navigate("chatscreen/${user.id}") }
+                    myLat = viewModel.myLat,
+                    myLng = viewModel.myLng,
+                    onClick = {
+                        navController.navigate("chatscreen/${user.id}")
+                    }
                 )
             }
         }
@@ -227,8 +237,7 @@ fun UserVibeCard(user: NearbyVibeUser, myLat: Double, myLng: Double, onClick: ()
                 Box(
                     modifier = Modifier
                         .size(60.dp)
-                        .clip(CircleShape)
-                        .background(user.color),
+                        .clip(CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -343,83 +352,65 @@ fun FilterChip(
 @Composable
 fun NearbyRadar(
     users: List<NearbyVibeUser>,
+    myLat: Double,
+    myLng: Double,
     onUserClick: (NearbyVibeUser) -> Unit
 ) {
 
-    val infiniteTransition = rememberInfiniteTransition()
-
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing)
-        ), label = ""
-    )
-
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing)
-        ), label = ""
-    )
+    val radarRadius = 120f
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
+            .height(240.dp)
             .background(Color.White, RoundedCornerShape(20.dp)),
         contentAlignment = Alignment.Center
     ) {
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val radius = size.minDimension / 2
 
             drawCircle(
                 color = Color(0xFF6A82FB).copy(alpha = 0.2f),
-                radius = radius
+                radius = size.minDimension / 2
             )
-
-            drawCircle(
-                color = Color(0xFF6A82FB).copy(alpha = 0.1f),
-                radius = radius * pulse
-            )
-
-            rotate(rotation) {
-                drawLine(
-                    color = Color(0xFF6A82FB),
-                    start = center,
-                    end = Offset(center.x, 0f),
-                    strokeWidth = 6f
-                )
-            }
         }
 
-        // Center user
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .background(Color(0xFF6A82FB), CircleShape)
-        )
+        users.take(8).forEach { user ->
 
-        // Nearby user dots
-        users.take(6).forEachIndexed { index, user ->
+            val results = FloatArray(3)
 
-            // Simple angle-distance placement
-            val angle = (index * 60).toFloat() // degrees
-            val distance = 60 + (index * 15)   // px offset
+            Location.distanceBetween(
+                myLat,
+                myLng,
+                user.latitude,
+                user.longitude,
+                results
+            )
 
-            val x = cos(Math.toRadians(angle.toDouble())) * distance
-            val y = sin(Math.toRadians(angle.toDouble())) * distance
+            val distance = results[0]
+            val bearing = results[1]
+
+            val normalizedDistance =
+                (distance / 1000f).coerceAtMost(1f)
+
+            val radarDistance =
+                normalizedDistance * radarRadius
+
+            val x =
+                cos(Math.toRadians(bearing.toDouble())) *
+                        radarDistance
+
+            val y =
+                sin(Math.toRadians(bearing.toDouble())) *
+                        radarDistance
 
             Box(
                 modifier = Modifier
                     .offset(x.dp, y.dp)
                     .size(14.dp)
                     .clip(CircleShape)
-                    .background(user.color)
-                    .border(1.dp, Color.White, CircleShape)
-                    .clickable { onUserClick(user) } // <-- tap callback
+                    .background(Color(0xFF6A82FB))
+                    .clickable { onUserClick(user) }
             )
         }
     }
