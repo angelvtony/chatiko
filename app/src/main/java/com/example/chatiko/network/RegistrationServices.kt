@@ -6,7 +6,7 @@ import com.example.chatiko.ui.preferences.PreferenceModel
 import com.example.chatiko.ui.registration.LocationRequest
 import com.example.chatiko.ui.registration.RegistrationResponse
 import com.example.chatiko.ui.registration.User
-import com.example.chatiko.ui.vibes.NearbyVibeUser
+import com.example.chatiko.ui.vibes.FetchNearbyLocationElement
 import kotlinx.serialization.SerialName
 import retrofit2.Call
 import retrofit2.http.Body
@@ -45,7 +45,7 @@ interface RegistrationServices {
         @Query("latitude") latitude: Double,
         @Query("longitude") longitude: Double,
         @Query("radius") radius: Int = 1000
-    ): List<NearbyVibeUser>
+    ): List<FetchNearbyLocationElement>
 }
 
 
