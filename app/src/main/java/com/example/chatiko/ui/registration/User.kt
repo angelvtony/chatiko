@@ -8,3 +8,8 @@ data class User(
     val longitude: Double?,
     val isOnline: Boolean?,
 )
+
+data class LocationRequest(
+    val latitude: Double,
+    val longitude: Double,
+)

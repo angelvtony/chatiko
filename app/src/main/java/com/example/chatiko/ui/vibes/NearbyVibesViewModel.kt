@@ -1,120 +1,165 @@
 package com.example.chatiko.ui.vibes
 
+import android.content.Context
 import android.location.Location
 import android.util.Log
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.chatiko.network.LocationHelper
 import com.example.chatiko.network.RegistrationServices
-import com.example.chatiko.ui.registration.User
+import com.example.chatiko.ui.registration.LocationRequest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class NearbyVibesViewModel(
+    private val context: Context?,
     private val api: RegistrationServices?,
     private val userId: String?,
     private val locationHelper: LocationHelper?,
-    private val initialMood: String? = null
+    initialMood: String?
 ) : ViewModel() {
 
-    // Selected mood
-    private val _selectedMood = MutableStateFlow(initialMood?:"")
+    private val _selectedMood = MutableStateFlow(initialMood ?: "Happy")
     val selectedMood: StateFlow<String> = _selectedMood
 
-    // All moods
-    val moods = listOf("Happy", "Sad", "Stressed", "Vibing", "Bored", "Working", "Idle", "Normal")
+    val moods = listOf(
+        "Happy","Sad","Stressed","Vibing",
+        "Bored","Working","Idle","Normal"
+    )
 
-    // Current device location
-     var _myLat: Double = 0.0
-     var _myLng: Double = 0.0
+    var myLat: Double = 0.0
+    var myLng: Double = 0.0
 
-    // Raw nearby users from API
-    private val _nearbyUsers = MutableStateFlow<List<NearbyVibeUser>>(emptyList())
+    private val _nearbyUsers =
+        MutableStateFlow<List<NearbyVibeUser?>>(emptyList())
 
-    // Filtered users based on selected mood
-    val filteredUsers: StateFlow<List<NearbyVibeUser>> = combine(_nearbyUsers, _selectedMood) { users, mood ->
-        users
-            .filter { it.mood == mood } // only keep users with matching mood
-            .sortedBy { user ->
-                val results = FloatArray(1)
-                Location.distanceBetween(_myLat, _myLng, user.latitude, user.longitude, results)
-                results[0]
-            }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val filteredUsers: StateFlow<List<NearbyVibeUser>> =
+        combine(_nearbyUsers, _selectedMood) { users, mood ->
 
-    // Select a mood
+            users
+                .filterNotNull()
+                .filter { it.mood == mood }
+
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
+
+    private var isUpdating = false
+
     fun selectMood(mood: String) {
         _selectedMood.value = mood
     }
 
-    // Refresh users and include current device location
-    fun refreshNearbyUsers() {
+    fun startNearbyUpdates() {
+
+        if (isUpdating) return
+        isUpdating = true
+
         viewModelScope.launch {
-            try {
-                // 1️⃣ Get current device location
-                val location = locationHelper?.getCurrentLocation()
-                if (location != null) {
-                    _myLat = location.latitude
-                    _myLng = location.longitude
 
-                    // 2️⃣ Update current user location on backend
-                    api?.updateLocation(
-                        userId,
-                        User(
-                            username = null,
-                            email = null,
-                            password = null,
-                            latitude = _myLat,
-                            longitude = _myLng,
-                            isOnline = true
-                        )
-                    )
+            delay(2000) // allow GPS warmup
 
-                    // 3️⃣ Fetch nearby users from backend
-                    val nearby = api?.getNearbyUsers(_myLat, _myLng) ?: emptyList()
+            while (true) {
 
-                    // 4️⃣ Add current user to the list
-                    val currentUser = NearbyVibeUser(
-                        id = userId,
-                        username = "You",
-                        mood = _selectedMood.value,
-                        moodEmoji = "😊",
-                        latitude = _myLat,
-                        longitude = _myLng,
-                        isOnline = true,
-                        color = Color(0xFF6A82FB)
-                    )
+                val sharedPref = context?.getSharedPreferences(
+                    "user_prefs",
+                    Context.MODE_PRIVATE
+                )
 
-                    // Filter out null users just in case API returns incomplete data
-                    val safeNearby = nearby.filterNotNull()
+                val jwtToken =
+                    sharedPref?.getString("jwt_token", null)
 
-                    _nearbyUsers.value = listOf(currentUser) + safeNearby
+                refreshNearbyUsers(jwtToken)
 
-                    Log.d("NearbyVibesVM", "Nearby users refreshed: ${_nearbyUsers.value.size}")
-                } else {
-                    Log.e("NearbyVibesVM", "Device location is null")
-                }
-            } catch (e: Exception) {
-                Log.e("NearbyVibesVM", "Error refreshing nearby users", e)
+                delay(10000)
             }
+        }
+    }
+
+    private suspend fun refreshNearbyUsers(jwtToken: String?) {
+
+        if (jwtToken.isNullOrEmpty()) {
+            Log.e("NearbyVM", "JWT token missing")
+            return
+        }
+
+        try {
+            val location = locationHelper?.getCurrentLocation()
+            if (location == null) {
+                Log.e("NearbyVM","Location null")
+                return
+            }
+
+            myLat = location.latitude
+            myLng = location.longitude
+
+            Log.d("NearbyVM", "Location -> $myLat,$myLng")
+
+            val authHeader = "Bearer $jwtToken"
+
+            // ✅ Updated API call
+            val response = api?.updateLocation(
+                authHeader,
+                userId.toString(),
+                LocationRequest(myLat, myLng)
+            )
+
+            Log.d("NearbyVM", "Location update response: ${response?.message}")
+
+            // Fetch nearby users
+            val nearby = api?.getNearbyUsers(authHeader, myLat, myLng)?.filterNotNull()
+
+            val currentUser = NearbyVibeUser(
+                id = userId,
+                username = "You",
+                mood = _selectedMood.value,
+                moodEmoji = "😊",
+                latitude = myLat,
+                longitude = myLng,
+                isOnline = true
+            )
+
+            _nearbyUsers.value = (listOf(currentUser) + nearby) as List<NearbyVibeUser?>
+
+        } catch (e: Exception) {
+            Log.e("NearbyVM", "API Error", e)
         }
     }
 }
 
-// Factory for creating ViewModel with parameters
 class NearbyVibesViewModelFactory(
+    private val context: Context?,
     private val api: RegistrationServices?,
     private val userId: String?,
     private val locationHelper: LocationHelper?,
     private val initialMood: String?
 ) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(NearbyVibesViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return NearbyVibesViewModel(api, userId, locationHelper,initialMood) as T
+
+    override fun <T : ViewModel> create(
+        modelClass: Class<T>
+    ): T {
+
+        if (modelClass.isAssignableFrom(
+                NearbyVibesViewModel::class.java
+            )
+        ) {
+
+            return NearbyVibesViewModel(
+                context,
+                api,
+                userId,
+                locationHelper,
+                initialMood
+            ) as T
         }
-        throw IllegalArgumentException("Unknown ViewModel class")
+
+        throw IllegalArgumentException(
+            "Unknown ViewModel"
+        )
     }
 }

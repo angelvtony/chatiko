@@ -3,9 +3,11 @@ package com.example.chatiko.network
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
+import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 //class LocationHelper(context: Context) {
 //
@@ -23,33 +25,39 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 class LocationHelper(context: Context) {
 
-    private val fusedLocationClient =
+    private val fusedClient =
         LocationServices.getFusedLocationProviderClient(context)
 
+    private val request = LocationRequest.Builder(
+        Priority.PRIORITY_HIGH_ACCURACY,
+        5000
+    ).build()
+
     @SuppressLint("MissingPermission")
-    suspend fun getCurrentLocation(): Location? = suspendCancellableCoroutine { cont ->
+    suspend fun getCurrentLocation(): Location? {
 
-        fusedLocationClient.lastLocation
-            .addOnSuccessListener { location ->
+        return suspendCancellableCoroutine { cont ->
 
-                if (location != null) {
-                    cont.resume(location) {}
-                } else {
+            fusedClient.lastLocation
+                .addOnSuccessListener { location ->
 
-                    fusedLocationClient.getCurrentLocation(
-                        Priority.PRIORITY_HIGH_ACCURACY,
-                        null
-                    ).addOnSuccessListener { freshLocation ->
-                        cont.resume(freshLocation) {}
-                    }.addOnFailureListener {
-                        cont.resume(null) {}
+                    if (location != null) {
+                        cont.resume(location)
+                    } else {
+
+                        fusedClient.getCurrentLocation(
+                            Priority.PRIORITY_HIGH_ACCURACY,
+                            null
+                        ).addOnSuccessListener {
+                            cont.resume(it)
+                        }.addOnFailureListener {
+                            cont.resume(null)
+                        }
                     }
-
                 }
-
-            }
-            .addOnFailureListener {
-                cont.resume(null) {}
-            }
+                .addOnFailureListener {
+                    cont.resume(null)
+                }
+        }
     }
 }
