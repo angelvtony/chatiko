@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.chatiko.network.LocationHelper
 import com.example.chatiko.network.RegistrationServices
+import com.example.chatiko.network.RetrofitClient
 import com.example.chatiko.ui.registration.LocationRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -103,7 +104,7 @@ class NearbyVibesViewModel(
             val authHeader = "Bearer $jwtToken"
 
             // ✅ Updated API call
-            val response = api?.updateLocation(
+            val response = RetrofitClient.instance.updateLocation(
                 authHeader,
                 userId.toString(),
                 LocationRequest(myLat, myLng)
@@ -112,7 +113,7 @@ class NearbyVibesViewModel(
             Log.d("NearbyVM", "Location update response: ${response?.message}")
 
             // Fetch nearby users
-            val nearby = api?.getNearbyUsers(authHeader, myLat, myLng)?.filterNotNull()
+            val nearby = RetrofitClient.instance.getNearbyUsers(authHeader, myLat, myLng)?.filterNotNull()
 
             val currentUser = NearbyVibeUser(
                 id = userId,
