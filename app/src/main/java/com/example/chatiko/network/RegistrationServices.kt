@@ -1,5 +1,6 @@
 package com.example.chatiko.network
 
+import com.example.chatiko.ui.chat.Message
 import com.example.chatiko.ui.login.LoginRequest
 import com.example.chatiko.ui.login.LoginResponse
 import com.example.chatiko.ui.preferences.PreferenceModel
@@ -57,10 +58,13 @@ interface RegistrationServices {
 
 data class MessageDto(
     val id: String,
-    val senderId: String,
-    val receiverId: String,
-    val message: String,
-    val createdAt: String
+    val senderId: String?,
+    val receiverId: String?,
+    val message: String?,
+    val reaction: String?,
+    val createdAt: String?,
+    val replyTo: MessageDto? = null,
+    val isMe: Boolean
 )
 
 

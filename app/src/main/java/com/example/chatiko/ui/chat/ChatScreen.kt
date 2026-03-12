@@ -5,7 +5,19 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,7 +26,19 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material3.*
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,13 +50,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.chatiko.network.RegistrationServices
+import com.example.chatiko.network.MessageDto
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModel
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModelFactory
 
@@ -41,18 +62,19 @@ import com.example.chatiko.ui.chat.viewmodel.ChatViewModelFactory
 fun ChatScreen(
     navController: NavController?,
     userId: String?,
-    otherUserId: String?
+    otherUserId: String?,
+    username: String?
 ) {
     val context = LocalContext.current
     val viewModel: ChatViewModel = viewModel(
-        factory = ChatViewModelFactory(context,userId, otherUserId)
+        factory = ChatViewModelFactory(context, userId, otherUserId)
     )
 
     val messages = viewModel.messages
     val replyingTo by viewModel.replyingTo
 
     Scaffold(
-        topBar = { ChatTopBar() },
+        topBar = { ChatTopBar(username) },
         bottomBar = {
             MessageInputBar(
                 replyingTo = replyingTo,
@@ -64,8 +86,17 @@ fun ChatScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            reverseLayout = true
+                .padding(
+                    PaddingValues(
+                        start = 12.dp,
+                        end = 12.dp,
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = paddingValues.calculateBottomPadding()
+                    )
+                ),
+            reverseLayout = true,
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(
                 items = messages.reversed(),
@@ -78,7 +109,9 @@ fun ChatScreen(
                     MessageBubble(
                         message = message,
                         onDelete = {},
-                        onReact = {},
+                        onReact = { reaction ->
+                            viewModel.reactToMessage(message.id, reaction = reaction)
+                        },
                         onReply = { viewModel.setReply(message) }
                     )
                 }
@@ -89,13 +122,13 @@ fun ChatScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatTopBar() {
+fun ChatTopBar(username: String?) {
     TopAppBar(
         modifier = Modifier.shadow(elevation = 8.dp),
         title = {
             Column {
                 Text(
-                    text = "Arathi",
+                    text = username ?: "",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -124,7 +157,7 @@ fun ChatTopBar() {
 
 @Composable
 fun MessageBubble(
-    message: Message,
+    message: MessageDto,
     onDelete: () -> Unit,
     onReact: (String) -> Unit,
     onReply: () -> Unit
@@ -136,10 +169,7 @@ fun MessageBubble(
     else
         Color.White
 
-    val textColor = if (message.isMe)
-        Color.White
-    else
-        Color.Black
+    val textColor = if (message.isMe) Color.White else Color.Black
 
     val alignment = if (message.isMe)
         Alignment.CenterEnd else Alignment.CenterStart
@@ -161,8 +191,7 @@ fun MessageBubble(
         contentAlignment = alignment
     ) {
         Column(
-            horizontalAlignment = if (message.isMe)
-                Alignment.End else Alignment.Start,
+            horizontalAlignment = if (message.isMe) Alignment.End else Alignment.Start,
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
 
@@ -174,7 +203,7 @@ fun MessageBubble(
                     modifier = Modifier.padding(bottom = 4.dp)
                 ) {
                     Text(
-                        text = it.text,
+                        text = it.message ?: "",
                         modifier = Modifier.padding(6.dp),
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1
@@ -182,37 +211,44 @@ fun MessageBubble(
                 }
             }
 
-            Surface(
-                color = bubbleColor,
-                shape = bubbleShape,
-                tonalElevation = 2.dp,
-                shadowElevation = 2.dp
-            ) {
-                Text(
-                    text = message.text,
-                    modifier = Modifier.padding(12.dp),
-                    color = textColor,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            // Reaction badge
-            message.reaction?.let {
+            Box {
+                // Message bubble
                 Surface(
-                    shape = RoundedCornerShape(50),
-                    color = Color.White,
-                    shadowElevation = 4.dp,
-                    modifier = Modifier
-                        .padding(top = 4.dp)
+                    color = bubbleColor,
+                    shape = bubbleShape,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 2.dp,
                 ) {
                     Text(
-                        text = it,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        text = message.message ?: "",
+                        modifier = Modifier.padding(12.dp),
+                        color = textColor,
+                        style = MaterialTheme.typography.bodyMedium
                     )
+                }
+
+                // Instagram-style reaction badge
+                message.reaction?.takeIf { it.isNotEmpty() && it != "null" }?.let { reaction ->
+                    Surface(
+                        color = Color.White,
+                        shape = RoundedCornerShape(50),
+                        tonalElevation = 4.dp,
+                        shadowElevation = 4.dp,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = 4.dp, y = 4.dp) // slightly overlapping bubble
+                    ) {
+                        Text(
+                            text = reaction,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
         }
 
+        // Long press menu
         DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false }
@@ -235,7 +271,7 @@ fun MessageBubble(
 
 @Composable
 fun MessageInputBar(
-    replyingTo: Message?,
+    replyingTo: MessageDto?,
     onCancelReply: () -> Unit,
     onSend: (String) -> Unit
 ) {
@@ -256,7 +292,7 @@ fun MessageInputBar(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Replying to: ${it.text}",
+                        text = "Replying to: ${it.message}",
                         maxLines = 1
                     )
                     TextButton(onClick = onCancelReply) {
