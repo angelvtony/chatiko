@@ -24,38 +24,43 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.chatiko.network.RegistrationServices
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModel
+import com.example.chatiko.ui.chat.viewmodel.ChatViewModelFactory
 
 
 @Composable
 fun ChatScreen(
     navController: NavController?,
-    userId: String,
-    viewModel: ChatViewModel = viewModel()
+    userId: String?,
+    otherUserId: String?
 ) {
+    val context = LocalContext.current
+    val viewModel: ChatViewModel = viewModel(
+        factory = ChatViewModelFactory(context,userId, otherUserId)
+    )
 
     val messages = viewModel.messages
     val replyingTo by viewModel.replyingTo
 
     Scaffold(
         topBar = { ChatTopBar() },
-
         bottomBar = {
             MessageInputBar(
                 replyingTo = replyingTo,
                 onCancelReply = { viewModel.clearReply() },
-                onSend = { text ->
-                    viewModel.sendMessage(text)
-                }
+                onSend = { text -> viewModel.sendMessage(text) }
             )
         }
     ) { paddingValues ->
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -72,13 +77,9 @@ fun ChatScreen(
                 ) {
                     MessageBubble(
                         message = message,
-                        onDelete = { viewModel.deleteMessage(message) },
-                        onReact = { emoji ->
-                            viewModel.addReaction(message, emoji)
-                        },
-                        onReply = {
-                            viewModel.setReply(message)
-                        }
+                        onDelete = {},
+                        onReact = {},
+                        onReply = { viewModel.setReply(message) }
                     )
                 }
             }
@@ -298,9 +299,3 @@ fun MessageInputBar(
         }
     }
 }
-
-//@Preview(showBackground = true)
-//@Composable
-//fun PreviewHomeScreen() {
-//    ChatScreen(null)
-//}

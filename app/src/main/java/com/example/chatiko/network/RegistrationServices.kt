@@ -46,7 +46,22 @@ interface RegistrationServices {
         @Query("longitude") longitude: Double,
         @Query("radius") radius: Int = 1000
     ): List<FetchNearbyLocationElement>
+
+    @GET("api/messages/{userId}")
+    suspend fun getMessages(
+        @Path("userId") userId: String?,
+        @Header("Authorization") token: String
+    ): List<MessageDto>
 }
+
+
+data class MessageDto(
+    val id: String,
+    val senderId: String,
+    val receiverId: String,
+    val message: String,
+    val createdAt: String
+)
 
 
 @kotlinx.serialization.Serializable
