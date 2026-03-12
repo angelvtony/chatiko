@@ -92,13 +92,17 @@ class MainActivity : ComponentActivity() {
                     composable("preference") {
                         PreferenceScreen(navController)
                     }
-
                     composable(
-                        route = "chatscreen/{userId}",
-                        arguments = listOf(navArgument("userId") { type = NavType.StringType })
+                        route = "chatscreen/{userId}/{otherUserId}",
+                        arguments = listOf(
+                            navArgument("userId") { type = NavType.StringType },
+                            navArgument("otherUserId") { type = NavType.StringType }
+                        )
                     ) { backStackEntry ->
                         val userId = backStackEntry.arguments?.getString("userId")
-                        ChatScreen(navController, userId ?: "")
+                        val otherId = backStackEntry.arguments?.getString("otherUserId")
+
+                        ChatScreen(navController,userId, otherId)
                     }
 
                     composable(
