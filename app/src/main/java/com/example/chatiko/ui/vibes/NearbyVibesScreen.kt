@@ -136,7 +136,7 @@ fun NearbyVibesScreen(
                     myLat = viewModel.myLat,
                     myLng = viewModel.myLng,
                     onUserClick = { user ->
-                        navController.navigate("chatscreen/${userId}/${user.id}")
+                        navController.navigate("chatscreen/${userId}/${user.id}/${user.username}")
                     }
                 )
             }
@@ -147,7 +147,7 @@ fun NearbyVibesScreen(
                     myLat = viewModel.myLat,
                     myLng = viewModel.myLng,
                     onClick = {
-                        navController.navigate("chatscreen/${userId}/${user.id}")
+                        navController.navigate("chatscreen/${userId}/${user.id}/${user.username}")
                     }
                 )
             }

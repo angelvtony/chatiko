@@ -1,22 +1,19 @@
 package com.example.chatiko.ui.chat.viewmodel
 
-import ads_mobile_sdk.au
-import ads_mobile_sdk.nu
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
-import com.example.chatiko.ui.chat.Message
-import androidx.compose.runtime.State
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.chatiko.network.RegistrationServices
+import com.example.chatiko.network.MessageDto
 import com.example.chatiko.network.RetrofitClient
 import io.socket.client.IO
+import io.socket.client.Socket
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import io.socket.client.Socket
 
 
 class ChatViewModel(
@@ -25,11 +22,11 @@ class ChatViewModel(
     private val otherUserId: String?
 ) : ViewModel() {
 
-    private val _messages = mutableStateListOf<Message>()
-    val messages: List<Message> = _messages
+    private val _messages = mutableStateListOf<MessageDto>()
+    val messages: List<MessageDto> = _messages
 
-    private val _replyingTo = mutableStateOf<Message?>(null)
-    val replyingTo: State<Message?> = _replyingTo
+    private val _replyingTo = mutableStateOf<MessageDto?>(null)
+    val replyingTo: State<MessageDto?> = _replyingTo
 
     private lateinit var socket: Socket
 
@@ -57,12 +54,31 @@ class ChatViewModel(
             socket.on("receiveMessage") { args ->
                 if (args.isNotEmpty()) {
                     val msgJson = args[0] as JSONObject
-                    val msg = Message(
+                    val msg = MessageDto(
                         id = msgJson.getString("_id"),
-                        text = msgJson.getString("message"),
-                        isMe = msgJson.getString("senderId") == userId
+                        message = msgJson.getString("message"),
+                        isMe = msgJson.getString("senderId") == userId,
+                        senderId = msgJson.getString("senderId"),
+                        receiverId = msgJson.getString("receiverId"),
+                        reaction = msgJson.optString("reaction", null),
+                        replyTo = null,
+                        createdAt = ""
+
                     )
                     _messages.add(msg)
+                }
+            }
+            socket.on("messageReaction") { args ->
+
+                val json = args[0] as JSONObject
+                val messageId = json.getString("_id")
+                val reaction = json.optString("reaction")
+
+                val index = _messages.indexOfFirst { it.id == messageId }
+
+                if (index != -1) {
+                    val oldMessage = _messages[index]
+                    _messages[index] = oldMessage.copy(reaction = reaction)
                 }
             }
 
@@ -84,10 +100,17 @@ class ChatViewModel(
                 val authHeader = "Bearer $jwtToken"
                 val response = RetrofitClient.instance.getMessages(otherUserId, authHeader) // Make sure this is correct in your interface
                 _messages.addAll(response.map {
-                    Message(
+                    MessageDto(
                         id = it.id,
-                        text = it.message,
-                        isMe = it.senderId == userId
+                        senderId = it.senderId,
+                        receiverId = it.receiverId,
+                        message = it.message,
+                        isMe = it.senderId == userId,
+                        reaction = it.reaction,
+                        replyTo = it.replyTo,
+                        createdAt = it.createdAt
+
+
                     )
                 })
             } catch (e: Exception) {
@@ -97,28 +120,35 @@ class ChatViewModel(
     }
 
     fun sendMessage(text: String) {
+
         val replyToId = _replyingTo.value?.id
-        val msg = Message(
-            id = System.currentTimeMillis().toString(),
-            text = text,
-            isMe = true,
-            replyTo = _replyingTo.value
-        )
-        _messages.add(msg)
         _replyingTo.value = null
 
-        // Emit to server
         val json = JSONObject().apply {
             put("senderId", userId)
             put("receiverId", otherUserId)
             put("message", text)
             replyToId?.let { put("replyTo", it) }
         }
+
         socket.emit("sendMessage", json)
     }
 
-    fun setReply(message: Message) {
+    fun setReply(message: MessageDto) {
         _replyingTo.value = message
+    }
+
+    fun reactToMessage(messageId: String, reaction: String) {
+
+        val json = JSONObject().apply {
+
+            put("messageId", messageId)
+            put("reaction", reaction)
+            put("senderId", userId)
+            put("receiverId", otherUserId)
+        }
+
+        socket.emit("reactMessage", json)
     }
 
     fun clearReply() {
@@ -139,7 +169,7 @@ class ChatViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ChatViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return ChatViewModel(context,userId, otherUserId) as T
+            return ChatViewModel(context, userId, otherUserId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
