@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -118,7 +119,8 @@ fun NearbyVibesScreen(
                 selectedMood = selectedMood,
                 nearbyCount = filteredUsers.size,
                 moods = moods,
-                viewModel = viewModel
+                viewModel = viewModel,
+                navController = navController
             )
         }
     ) { padding ->
@@ -160,8 +162,12 @@ fun NearbyVibesTopBar(
     selectedMood: String,
     nearbyCount: Int,
     moods: List<String>,
-    viewModel: NearbyVibesViewModel
+    viewModel: NearbyVibesViewModel,
+    navController: NavController
 ) {
+
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -170,17 +176,60 @@ fun NearbyVibesTopBar(
             .padding(top = 16.dp, bottom = 8.dp)
     ) {
 
-        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-            Text(
-                text = "$selectedMood Vibe Nearby ${getEmoji(selectedMood)}",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "$nearbyCount people nearby",
-                fontSize = 14.sp,
-                color = Color.Gray
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "$selectedMood Vibe Nearby ${getEmoji(selectedMood)}",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text(
+                    text = "$nearbyCount people nearby",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+            }
+
+            // 🍔 Hamburger Menu
+            Box {
+
+                IconButton(
+                    onClick = { menuExpanded = true }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Menu"
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+
+                    DropdownMenuItem(
+                        text = { Text("Profile") },
+                        onClick = {
+                            menuExpanded = false
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = { Text("Settings") },
+                        onClick = {
+                            menuExpanded = false
+                            navController.navigate("settings")
+                        }
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))

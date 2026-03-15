@@ -2,6 +2,7 @@ package com.example.chatiko.ui.spalsh
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -51,6 +52,7 @@ import com.example.chatiko.ui.chat.ChatScreen
 import com.example.chatiko.ui.login.LoginScreenV1
 import com.example.chatiko.ui.preferences.PreferenceScreen
 import com.example.chatiko.ui.registration.RegistrationScreen
+import com.example.chatiko.ui.settings.SettingsScreen
 import com.example.chatiko.ui.theme.ChatikoTheme
 import com.example.chatiko.ui.tutorial.HomeScreen
 import com.example.chatiko.ui.vibes.NearbyVibesScreen
@@ -117,6 +119,10 @@ class MainActivity : ComponentActivity() {
 
                         NearbyVibesScreen(navController, null, sharedPref.getString("userId", null), initialMood = selectedMood)
                     }
+
+                    composable("settings") {
+                        SettingsScreen(navController)
+                    }
                 }
             }
         }
@@ -126,10 +132,27 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun SplashScreen(navController: NavController) {
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
+
         delay(2000)
-        navController.navigate("home")
+
+        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+
+        val token = sharedPref.getString("jwt_token", null)
+
+        if (token != null) {
+            // User already logged in
+            navController.navigate("home") {
+                popUpTo("splash") { inclusive = true }
+            }
+        } else {
+            // User not logged in
+            navController.navigate("registration") {
+                popUpTo("home") { inclusive = true }
+            }
+        }
     }
 
     val transition = rememberInfiniteTransition()
