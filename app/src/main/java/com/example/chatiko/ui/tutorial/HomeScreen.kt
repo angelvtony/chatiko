@@ -1,5 +1,6 @@
 package com.example.chatiko.ui.tutorial
 
+import android.content.Context
 import android.widget.Button
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
@@ -25,6 +26,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -55,6 +58,18 @@ val screens = listOf(
 fun HomeScreen(navController: NavController?) {
     // State for HorizontalPager (keeps track of current page)
     val pagerState = rememberPagerState(0){3}
+
+    val context = LocalContext.current
+    val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val token = sharedPref.getString("jwt_token", null)
+
+    LaunchedEffect(Unit) {
+        if (token != null) {
+            navController?.navigate("nearby_vibes/Chill") {
+                popUpTo("home") { inclusive = true }
+            }
+        }
+    }
 
     // Column to hold HorizontalPager and dots indicator
     Column(
