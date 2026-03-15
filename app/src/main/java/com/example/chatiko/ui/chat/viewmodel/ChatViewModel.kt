@@ -40,7 +40,7 @@ class ChatViewModel(
             val opts = IO.Options()
             opts.forceNew = true
             opts.reconnection = true
-            socket = IO.socket("http://10.63.1.4:3000", opts) // Replace with your server IP
+            socket = IO.socket("http://10.63.0.148:3000", opts) // Replace with your server IP
 
             socket.connect()
 
@@ -80,6 +80,13 @@ class ChatViewModel(
                     val oldMessage = _messages[index]
                     _messages[index] = oldMessage.copy(reaction = reaction)
                 }
+            }
+
+            socket.on("messageDeleted") { args ->
+                val data = args[0] as JSONObject
+                val messageId = data.getString("messageId")
+
+                _messages.removeAll { it.id == messageId }
             }
 
         } catch (e: Exception) {
@@ -149,6 +156,16 @@ class ChatViewModel(
         }
 
         socket.emit("reactMessage", json)
+    }
+
+    fun deleteMessage(messageId: String) {
+        val data = mapOf(
+            "messageId" to messageId,
+            "senderId" to userId,
+            "receiverId" to otherUserId
+        )
+
+        socket.emit("deleteMessage", JSONObject(data))
     }
 
     fun clearReply() {

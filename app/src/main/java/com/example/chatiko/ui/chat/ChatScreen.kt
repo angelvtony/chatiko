@@ -108,7 +108,7 @@ fun ChatScreen(
                 ) {
                     MessageBubble(
                         message = message,
-                        onDelete = {},
+                        onDelete = { viewModel.deleteMessage(message.id) },
                         onReact = { reaction ->
                             viewModel.reactToMessage(message.id, reaction = reaction)
                         },
