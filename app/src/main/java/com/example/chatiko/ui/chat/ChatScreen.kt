@@ -323,36 +323,12 @@ fun MessageBubble(
             onDismissRequest = { showEmojiSheet = false }
         ) {
 
-            val emojis = listOf(
-                "😀","😁","😂","🤣","😃","😄","😅","😆",
-                "😉","😊","😍","😘","😎","🤩","🥳","🤔",
-                "😢","😭","😡","🔥","❤️","👍","👏","🙏"
-            )
+            EmojiPicker { emoji ->
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(6),
-                modifier = Modifier.padding(16.dp)
-            ) {
+                onReact(emoji)
 
-                items(emojis.size) { index ->
-
-                    val emoji = emojis[index]
-
-                    Text(
-                        text = emoji,
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier
-                            .padding(12.dp)
-                            .clickable {
-
-                                onReact(emoji)
-                                showEmojiSheet = false
-                            }
-                    )
-                }
+                showEmojiSheet = false
             }
-
-            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }
