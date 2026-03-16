@@ -39,7 +39,7 @@ class ChatViewModel(
 
     init {
         CryptoManager.generateKeyPair()
-//        uploadPublicKey()
+        uploadPublicKey()
         connectSocket()
         fetchChatHistory()
     }
@@ -49,7 +49,7 @@ class ChatViewModel(
             val opts = IO.Options()
             opts.forceNew = true
             opts.reconnection = true
-            socket = IO.socket("http://10.63.1.4:3000", opts) // Replace with your server IP
+            socket = IO.socket("http://10.63.0.148:3000", opts) // Replace with your server IP
 
             socket.connect()
 
@@ -61,21 +61,30 @@ class ChatViewModel(
 
             // Listen for incoming messages
             socket.on("receiveMessage") { args ->
-
                 val msgJson = args[0] as JSONObject
-                val encrypted = msgJson.getString("message")
+                val senderIdFromMsg = msgJson.getString("senderId")
 
-                val decrypted = decryptMessage(encrypted)
+                // Ignore messages sent by me, already added locally
+                if (senderIdFromMsg == userId) return@on
+
+                // Message from other user — decrypt it
+                val encryptedMessage = msgJson.getString("message")
+                val messageText: String = try {
+                    decryptMessage(encryptedMessage)
+                } catch (e: Exception) {
+                    Log.e("CHAT", "Decryption failed", e)
+                    encryptedMessage
+                }
 
                 val msg = MessageDto(
                     id = msgJson.getString("_id"),
-                    message = decrypted,
-                    isMe = msgJson.getString("senderId") == userId,
-                    senderId = msgJson.getString("senderId"),
+                    message = messageText,
+                    isMe = false,
+                    senderId = senderIdFromMsg,
                     receiverId = msgJson.getString("receiverId"),
                     reaction = msgJson.optString("reaction", null),
                     replyTo = null,
-                    createdAt = ""
+                    createdAt = msgJson.optString("createdAt", "")
                 )
 
                 _messages.add(msg)
@@ -106,34 +115,34 @@ class ChatViewModel(
         }
     }
 
-//    private fun uploadPublicKey() {
-//
-//        viewModelScope.launch {
-//
-//            try{
-//
-//                val sharedPref = context?.getSharedPreferences(
-//                    "user_prefs",
-//                    Context.MODE_PRIVATE
-//                )
-//
-//                val jwtToken = sharedPref?.getString("jwt_token",null)
-//
-//                val authHeader = "Bearer $jwtToken"
-//
-//                val key = CryptoManager.getPublicKeyString()
-//
-//                RetrofitClient.instance.uploadPublicKey(
-//                    PublicKeyRequest(key),
-//                    authHeader
-//                )
-//
-//            }catch(e:Exception){
-//                e.printStackTrace()
-//            }
-//
-//        }
-//    }
+    private fun uploadPublicKey() {
+
+        viewModelScope.launch {
+
+            try{
+
+                val sharedPref = context?.getSharedPreferences(
+                    "user_prefs",
+                    Context.MODE_PRIVATE
+                )
+
+                val jwtToken = sharedPref?.getString("jwt_token",null)
+
+                val authHeader = "Bearer $jwtToken"
+
+                val key = CryptoManager.getPublicKeyString()
+
+                RetrofitClient.instance.uploadPublicKey(
+                    PublicKeyRequest(key),
+                    authHeader
+                )
+
+            }catch(e:Exception){
+                e.printStackTrace()
+            }
+
+        }
+    }
 
     private fun fetchChatHistory() {
         viewModelScope.launch {
@@ -180,13 +189,9 @@ class ChatViewModel(
     }
 
     fun sendMessage(text: String) {
-
         viewModelScope.launch {
-
             val receiverPublicKey = getReceiverPublicKey()
-
             if (receiverPublicKey == null) {
-
                 Log.e("CHAT", "Receiver public key missing")
                 return@launch
             }
@@ -194,13 +199,26 @@ class ChatViewModel(
             val encrypted = encryptMessage(text, receiverPublicKey)
 
             val json = JSONObject().apply {
-
                 put("senderId", userId)
                 put("receiverId", otherUserId)
                 put("message", encrypted)
-
             }
 
+            // Add to local messages immediately
+            val tempId = "temp-${System.currentTimeMillis()}"
+            val msg = MessageDto(
+                id = tempId,
+                message = text,  // plain text for sender
+                isMe = true,
+                senderId = userId!!,
+                receiverId = otherUserId!!,
+                reaction = null,
+                replyTo = null,
+                createdAt = System.currentTimeMillis().toString()
+            )
+            _messages.add(msg)
+
+            // Send to server
             socket.emit("sendMessage", json)
         }
     }
