@@ -63,9 +63,17 @@ class ChatViewModel(
             socket.on("receiveMessage") { args ->
                 val msgJson = args[0] as JSONObject
                 val senderIdFromMsg = msgJson.getString("senderId")
+                val serverMessageId = msgJson.getString("_id")
 
-                // Ignore messages sent by me, already added locally
-                if (senderIdFromMsg == userId) return@on
+                if (senderIdFromMsg == userId) {
+                    // Update the temp message ID to server-generated ID
+                    val index = _messages.indexOfFirst { it.id.startsWith("temp-") }
+                    if (index != -1) {
+                        val oldMsg = _messages[index]
+                        _messages[index] = oldMsg.copy(id = serverMessageId)
+                    }
+                    return@on
+                }
 
                 // Message from other user — decrypt it
                 val encryptedMessage = msgJson.getString("message")
@@ -77,7 +85,7 @@ class ChatViewModel(
                 }
 
                 val msg = MessageDto(
-                    id = msgJson.getString("_id"),
+                    id = serverMessageId,
                     message = messageText,
                     isMe = false,
                     senderId = senderIdFromMsg,
