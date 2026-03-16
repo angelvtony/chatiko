@@ -8,6 +8,7 @@ import com.example.chatiko.ui.registration.LocationRequest
 import com.example.chatiko.ui.registration.RegistrationResponse
 import com.example.chatiko.ui.registration.User
 import com.example.chatiko.ui.vibes.FetchNearbyLocationElement
+import com.google.gson.annotations.SerializedName
 import kotlinx.serialization.SerialName
 import retrofit2.Call
 import retrofit2.http.Body
@@ -53,11 +54,34 @@ interface RegistrationServices {
         @Path("userId") userId: String?,
         @Header("Authorization") token: String
     ): List<MessageDto>
+
+    @GET("api/users/{id}/publicKey")
+    suspend fun getUserPublicKey(
+        @Path("id") userId: String?,
+        @Header("Authorization") token: String
+    ): PublicKeyResponse
+
+    @POST("api/users/publicKey")
+    suspend fun uploadPublicKey(
+        @Body request: PublicKeyRequest,
+        @Header("Authorization") token: String
+    )
 }
+
+data class PublicKeyRequest(
+    val publicKey: String
+)
+
+data class PublicKeyResponse(
+    val publicKey: String?
+)
 
 
 data class MessageDto(
+
+    @SerializedName("_id")
     val id: String,
+
     val senderId: String?,
     val receiverId: String?,
     val message: String?,
