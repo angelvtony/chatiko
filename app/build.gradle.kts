@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.chatiko"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -93,5 +93,7 @@ dependencies {
 
 // Add this if you're using Jetpack Compose 1.3.0+
 
-
+    implementation("org.jitsi.react:jitsi-meet-sdk:12.0.0") {
+        isTransitive = true
+    }
 }

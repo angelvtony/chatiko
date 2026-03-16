@@ -78,8 +78,38 @@ fun ChatScreen(
     val messages = viewModel.messages
     val replyingTo by viewModel.replyingTo
 
+    val incomingCallType by viewModel.incomingCallType
+    val outgoingCallType by viewModel.outgoingCallType
+    val callAccepted by viewModel.callAccepted
+    val callDeclined by viewModel.callDeclined
+
+    val sharedRoomId = if (userId != null && otherUserId != null) {
+        if (userId < otherUserId) "${userId}_$otherUserId" else "${otherUserId}_$userId"
+    } else {
+        "chatiko_random_room"
+    }
+
+    // Launch Jitsi when call is accepted
+    androidx.compose.runtime.LaunchedEffect(callAccepted) {
+        if (callAccepted != null) {
+            try {
+                val options = org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
+                    .setRoom("chatiko_$sharedRoomId")
+                    .setAudioMuted(false)
+                    .setVideoMuted(callAccepted == "audio")
+                    .setFeatureFlag("chat.enabled", false)
+                    .setFeatureFlag("invite.enabled", false)
+                    .build()
+                org.jitsi.meet.sdk.JitsiMeetActivity.launch(context, options)
+                viewModel.resetCallStates() // Reset after launching
+            } catch(e: Exception) {
+                android.widget.Toast.makeText(context, "Error launching call", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     Scaffold(
-        topBar = { ChatTopBar(username) },
+        topBar = { ChatTopBar(username, viewModel) },
         bottomBar = {
             MessageInputBar(
                 replyingTo = replyingTo,
@@ -123,11 +153,51 @@ fun ChatScreen(
             }
         }
     }
+
+    // Show Dialogs
+    if (incomingCallType != null) {
+        IncomingCallDialog(
+            callerName = username ?: "Unknown",
+            callType = incomingCallType!!,
+            onAccept = {
+                viewModel.sendCallSignaling("CALL_ACCEPTED", incomingCallType!!)
+                // The receiver will launch Jitsi directly from here too
+                try {
+                    val options = org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
+                        .setRoom("chatiko_$sharedRoomId")
+                        .setAudioMuted(false)
+                        .setVideoMuted(incomingCallType == "audio")
+                        .setFeatureFlag("chat.enabled", false)
+                        .setFeatureFlag("invite.enabled", false)
+                        .build()
+                    org.jitsi.meet.sdk.JitsiMeetActivity.launch(context, options)
+                } catch(e: Exception) {
+                    android.widget.Toast.makeText(context, "Error joining call", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                viewModel.resetCallStates()
+            },
+            onDecline = {
+                viewModel.sendCallSignaling("CALL_DECLINED")
+                viewModel.resetCallStates()
+            }
+        )
+    }
+
+    if (outgoingCallType != null) {
+        OutgoingCallDialog(
+            receiverName = username ?: "Unknown",
+            callType = outgoingCallType!!,
+            onCancel = {
+                viewModel.sendCallSignaling("CALL_DECLINED")
+                viewModel.resetCallStates()
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatTopBar(username: String?) {
+fun ChatTopBar(username: String?, viewModel: ChatViewModel) {
     TopAppBar(
         modifier = Modifier.shadow(elevation = 8.dp),
         title = {
@@ -150,10 +220,14 @@ fun ChatTopBar(username: String?) {
             }
         },
         actions = {
-            IconButton(onClick = { }) {
+            IconButton(onClick = { 
+                viewModel.sendCallSignaling("CALL_REQUEST", "video")
+            }) {
                 Icon(Icons.Filled.Videocam, contentDescription = "Video Call")
             }
-            IconButton(onClick = { }) {
+            IconButton(onClick = { 
+                viewModel.sendCallSignaling("CALL_REQUEST", "audio")
+            }) {
                 Icon(Icons.Filled.Call, contentDescription = "Call")
             }
         }

@@ -35,6 +35,18 @@ class ChatViewModel(
     private val _replyingTo = mutableStateOf<MessageDto?>(null)
     val replyingTo: State<MessageDto?> = _replyingTo
 
+    private val _incomingCallType = mutableStateOf<String?>(null)
+    val incomingCallType: State<String?> = _incomingCallType
+
+    private val _outgoingCallType = mutableStateOf<String?>(null)
+    val outgoingCallType: State<String?> = _outgoingCallType
+
+    private val _callAccepted = mutableStateOf<String?>(null)
+    val callAccepted: State<String?> = _callAccepted
+
+    private val _callDeclined = mutableStateOf(false)
+    val callDeclined: State<Boolean> = _callDeclined
+
     private lateinit var socket: Socket
 
     init {
@@ -82,6 +94,25 @@ class ChatViewModel(
                 } catch (e: Exception) {
                     Log.e("CHAT", "Decryption failed", e)
                     encryptedMessage
+                }
+
+                if (messageText.startsWith("CALL_REQUEST:")) {
+                    val type = messageText.removePrefix("CALL_REQUEST:")
+                    _incomingCallType.value = type
+                    return@on
+                }
+
+                if (messageText.startsWith("CALL_ACCEPTED:")) {
+                    val type = messageText.removePrefix("CALL_ACCEPTED:")
+                    _callAccepted.value = type
+                    return@on
+                }
+
+                if (messageText.startsWith("CALL_DECLINED:")) {
+                    _callDeclined.value = true
+                    // Reset outgoing call state since it was declined
+                    _outgoingCallType.value = null
+                    return@on
                 }
 
                 val msg = MessageDto(
@@ -169,6 +200,12 @@ class ChatViewModel(
                     val decrypted =
                         decryptMessage(it.message ?: "")
 
+                    if (decrypted.startsWith("CALL_REQUEST:") || 
+                        decrypted.startsWith("CALL_ACCEPTED:") || 
+                        decrypted.startsWith("CALL_DECLINED:")) {
+                        return@map null
+                    }
+
                     MessageDto(
                         id = it.id,
                         senderId = it.senderId,
@@ -179,7 +216,7 @@ class ChatViewModel(
                         replyTo = it.replyTo,
                         createdAt = it.createdAt
                     )
-                })
+                }.filterNotNull())
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -229,6 +266,33 @@ class ChatViewModel(
             // Send to server
             socket.emit("sendMessage", json)
         }
+    }
+
+    fun sendCallSignaling(command: String, type: String = "") {
+        viewModelScope.launch {
+            val receiverPublicKey = getReceiverPublicKey() ?: return@launch
+            val signalMsg = if (type.isNotEmpty()) "$command:$type" else command
+            val encrypted = encryptMessage(signalMsg, receiverPublicKey)
+            val json = JSONObject().apply {
+                put("senderId", userId)
+                put("receiverId", otherUserId)
+                put("message", encrypted)
+            }
+            socket.emit("sendMessage", json)
+            
+            if (command == "CALL_REQUEST") {
+                _outgoingCallType.value = type
+            } else if (command == "CALL_ACCEPTED" || command == "CALL_DECLINED") {
+                _incomingCallType.value = null
+            }
+        }
+    }
+    
+    fun resetCallStates() {
+        _incomingCallType.value = null
+        _outgoingCallType.value = null
+        _callAccepted.value = null
+        _callDeclined.value = false
     }
 
     fun setReply(message: MessageDto) {
