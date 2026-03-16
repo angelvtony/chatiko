@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,12 +14,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +37,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -108,7 +113,7 @@ fun ChatScreen(
                 ) {
                     MessageBubble(
                         message = message,
-                        onDelete = {},
+                        onDelete = { viewModel.deleteMessage(message.id) },
                         onReact = { reaction ->
                             viewModel.reactToMessage(message.id, reaction = reaction)
                         },
@@ -155,6 +160,7 @@ fun ChatTopBar(username: String?) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageBubble(
     message: MessageDto,
@@ -162,23 +168,25 @@ fun MessageBubble(
     onReact: (String) -> Unit,
     onReply: () -> Unit
 ) {
+
     var showMenu by remember { mutableStateOf(false) }
+    var showReactions by remember { mutableStateOf(false) }
+    var showEmojiSheet by remember { mutableStateOf(false) }
 
-    val bubbleColor = if (message.isMe)
-        MaterialTheme.colorScheme.primary
-    else
-        Color.White
+    val bubbleColor =
+        if (message.isMe) MaterialTheme.colorScheme.primary else Color.White
 
-    val textColor = if (message.isMe) Color.White else Color.Black
+    val textColor =
+        if (message.isMe) Color.White else Color.Black
 
-    val alignment = if (message.isMe)
-        Alignment.CenterEnd else Alignment.CenterStart
+    val alignment =
+        if (message.isMe) Alignment.CenterEnd else Alignment.CenterStart
 
-    val bubbleShape = if (message.isMe) {
-        RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
-    } else {
-        RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
-    }
+    val bubbleShape =
+        if (message.isMe)
+            RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
+        else
+            RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
 
     Box(
         modifier = Modifier
@@ -186,16 +194,17 @@ fun MessageBubble(
             .padding(vertical = 4.dp)
             .combinedClickable(
                 onClick = {},
-                onLongClick = { showMenu = true }
+                onLongClick = { showReactions = true }
             ),
         contentAlignment = alignment
     ) {
+
         Column(
-            horizontalAlignment = if (message.isMe) Alignment.End else Alignment.Start,
+            horizontalAlignment =
+                if (message.isMe) Alignment.End else Alignment.Start,
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
 
-            // Reply preview
             message.replyTo?.let {
                 Surface(
                     color = Color(0x11000000),
@@ -212,59 +221,138 @@ fun MessageBubble(
             }
 
             Box {
-                // Message bubble
+
                 Surface(
                     color = bubbleColor,
                     shape = bubbleShape,
                     tonalElevation = 2.dp,
-                    shadowElevation = 2.dp,
+                    shadowElevation = 2.dp
                 ) {
                     Text(
                         text = message.message ?: "",
                         modifier = Modifier.padding(12.dp),
-                        color = textColor,
-                        style = MaterialTheme.typography.bodyMedium
+                        color = textColor
                     )
                 }
 
-                // Instagram-style reaction badge
                 message.reaction?.takeIf { it.isNotEmpty() && it != "null" }?.let { reaction ->
-                    Surface(
-                        color = Color.White,
-                        shape = RoundedCornerShape(50),
-                        tonalElevation = 4.dp,
-                        shadowElevation = 4.dp,
+                    Text(
+                        text = reaction,
+                        style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .offset(x = 4.dp, y = 4.dp) // slightly overlapping bubble
-                    ) {
-                        Text(
-                            text = reaction,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
+                            .offset(x = 6.dp, y = 6.dp)
+                    )
                 }
             }
         }
 
-        // Long press menu
+        // Floating reaction bar
+        AnimatedVisibility(
+            visible = showReactions,
+            enter = fadeIn()
+        ) {
+
+            Row(
+                modifier = Modifier
+                    .offset(y = (-45).dp)
+                    .background(Color.White, RoundedCornerShape(30.dp))
+                    .shadow(8.dp, RoundedCornerShape(30.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                val quickReactions =
+                    listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+
+                quickReactions.forEach { emoji ->
+
+                    Text(
+                        text = emoji,
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .clickable {
+                                onReact(emoji)
+                                showReactions = false
+                            }
+                    )
+                }
+
+                // PLUS BUTTON
+                Text(
+                    text = "➕",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .clickable {
+                            showEmojiSheet = true
+                            showReactions = false
+                        }
+                )
+            }
+        }
+
         DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false }
         ) {
+
             DropdownMenuItem(
                 text = { Text("Reply") },
-                onClick = { onReply(); showMenu = false }
+                onClick = {
+                    onReply()
+                    showMenu = false
+                }
             )
-            DropdownMenuItem(
-                text = { Text("React 👍") },
-                onClick = { onReact("👍"); showMenu = false }
-            )
+
             DropdownMenuItem(
                 text = { Text("Delete") },
-                onClick = { onDelete(); showMenu = false }
+                onClick = {
+                    onDelete()
+                    showMenu = false
+                }
             )
+        }
+    }
+
+    // Emoji picker bottom sheet
+    if (showEmojiSheet) {
+
+        ModalBottomSheet(
+            onDismissRequest = { showEmojiSheet = false }
+        ) {
+
+            val emojis = listOf(
+                "😀","😁","😂","🤣","😃","😄","😅","😆",
+                "😉","😊","😍","😘","😎","🤩","🥳","🤔",
+                "😢","😭","😡","🔥","❤️","👍","👏","🙏"
+            )
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(6),
+                modifier = Modifier.padding(16.dp)
+            ) {
+
+                items(emojis.size) { index ->
+
+                    val emoji = emojis[index]
+
+                    Text(
+                        text = emoji,
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .clickable {
+
+                                onReact(emoji)
+                                showEmojiSheet = false
+                            }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }
