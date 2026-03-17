@@ -1,5 +1,7 @@
 package com.example.chatiko.ui.chat
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -45,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +64,7 @@ import androidx.navigation.NavController
 import com.example.chatiko.network.MessageDto
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModel
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModelFactory
+import org.jitsi.meet.sdk.JitsiMeetConferenceOptions
 
 
 @Composable
@@ -83,6 +87,9 @@ fun ChatScreen(
     val callAccepted by viewModel.callAccepted
     val callDeclined by viewModel.callDeclined
 
+    val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val token = sharedPref.getString("jwt_token", null)
+
     val sharedRoomId = if (userId != null && otherUserId != null) {
         if (userId < otherUserId) "${userId}_$otherUserId" else "${otherUserId}_$userId"
     } else {
@@ -90,20 +97,27 @@ fun ChatScreen(
     }
 
     // Launch Jitsi when call is accepted
-    androidx.compose.runtime.LaunchedEffect(callAccepted) {
-        if (callAccepted != null) {
+    val jaasToken = remember { mutableStateOf<String?>(null) }
+
+// Before launching call, fetch token from your server
+    LaunchedEffect(callAccepted) {
+        if (callAccepted != null && jaasToken.value != null) {
             try {
-                val options = org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
+                val options = JitsiMeetConferenceOptions.Builder()
                     .setRoom("chatiko_$sharedRoomId")
                     .setAudioMuted(false)
                     .setVideoMuted(callAccepted == "audio")
                     .setFeatureFlag("chat.enabled", false)
                     .setFeatureFlag("invite.enabled", false)
+                    .setFeatureFlag("welcomepage.enabled", false)
+                    .setFeatureFlag("lobby.enabled", false)
+                    .setFeatureFlag("prejoinpage.enabled", false)
+                    .setToken(jaasToken.value)
                     .build()
                 org.jitsi.meet.sdk.JitsiMeetActivity.launch(context, options)
-                viewModel.resetCallStates() // Reset after launching
-            } catch(e: Exception) {
-                android.widget.Toast.makeText(context, "Error launching call", android.widget.Toast.LENGTH_SHORT).show()
+                viewModel.resetCallStates()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error launching call", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -169,6 +183,10 @@ fun ChatScreen(
                         .setVideoMuted(incomingCallType == "audio")
                         .setFeatureFlag("chat.enabled", false)
                         .setFeatureFlag("invite.enabled", false)
+                        .setFeatureFlag("welcomepage.enabled", false)    // skip welcome/join page
+                        .setFeatureFlag("lobby.enabled", false)          // disable lobby
+                        .setFeatureFlag("prejoinpage.enabled", false)
+                        .setToken(token)
                         .build()
                     org.jitsi.meet.sdk.JitsiMeetActivity.launch(context, options)
                 } catch(e: Exception) {

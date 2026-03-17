@@ -8,6 +8,11 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+// SocketManager.kt
+
+import io.socket.client.IO
+import io.socket.client.Socket
+import java.net.URISyntaxException
 
 //class LocationHelper(context: Context) {
 //
@@ -59,5 +64,30 @@ class LocationHelper(context: Context) {
                     cont.resume(null)
                 }
         }
+    }
+}
+
+object SocketManager {
+    private var mSocket: Socket? = null
+
+    fun init(userId: String) {
+        if (mSocket == null) {
+            try {
+                val opts = IO.Options()
+                opts.forceNew = true
+                mSocket = IO.socket("http://YOUR_SERVER_IP:3000", opts)
+                mSocket?.connect()
+                mSocket?.emit("join", userId)
+            } catch (e: URISyntaxException) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun getSocket(): Socket? = mSocket
+
+    fun disconnect() {
+        mSocket?.disconnect()
+        mSocket = null
     }
 }

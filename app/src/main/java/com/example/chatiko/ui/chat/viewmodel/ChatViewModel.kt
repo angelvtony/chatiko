@@ -13,10 +13,14 @@ import com.example.chatiko.network.CryptoManager
 import com.example.chatiko.network.MessageDto
 import com.example.chatiko.network.PublicKeyRequest
 import com.example.chatiko.network.RetrofitClient
+import com.example.chatiko.network.SocketManager
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.launch
+import org.jitsi.meet.sdk.JitsiMeetActivity
+import org.jitsi.meet.sdk.JitsiMeetConferenceOptions
 import org.json.JSONObject
+import java.net.URL
 import java.security.KeyFactory
 import java.security.PublicKey
 import java.security.spec.X509EncodedKeySpec
@@ -46,14 +50,45 @@ class ChatViewModel(
 
     private val _callDeclined = mutableStateOf(false)
     val callDeclined: State<Boolean> = _callDeclined
+    private var socket: Socket? = SocketManager.getSocket()
 
-    private lateinit var socket: Socket
+//    private lateinit var socket: Socket
+
+    fun sendCall(receiverId: String, type: String) {
+        val data = JSONObject()
+        data.put("senderId", userId)
+        data.put("receiverId", receiverId)
+        data.put("type", type)
+        socket?.emit("callRequest", data)
+    }
+
+    fun acceptCall(senderId: String, type: String) {
+        val data = JSONObject()
+        data.put("senderId", senderId)
+        data.put("receiverId", userId)
+        data.put("type", type)
+        socket?.emit("callAccepted", data)
+    }
+
+    fun declineCall(senderId: String) {
+        val data = JSONObject()
+        data.put("senderId", senderId)
+        data.put("receiverId", userId)
+        socket?.emit("callDeclined", data)
+    }
 
     init {
         CryptoManager.generateKeyPair()
         uploadPublicKey()
         connectSocket()
         fetchChatHistory()
+        socket?.on("incomingCall") { args ->
+            if (args.isNotEmpty()) {
+                val obj = args[0] as JSONObject
+                val type = obj.getString("type")
+                viewModelScope.launch { _incomingCallType.value = type }
+            }
+        }
     }
 
     private fun connectSocket() {
@@ -61,18 +96,18 @@ class ChatViewModel(
             val opts = IO.Options()
             opts.forceNew = true
             opts.reconnection = true
-            socket = IO.socket("http://10.63.0.148:3000", opts) // Replace with your server IP
+            socket = IO.socket("http://10.63.1.4:3000", opts) // Replace with your server IP
 
-            socket.connect()
+            socket?.connect()
 
-            socket.on(Socket.EVENT_CONNECT) {
-                Log.d("ChatVM", "Socket connected: ${socket.id()}")
+            socket?.on(Socket.EVENT_CONNECT) {
+                Log.d("ChatVM", "Socket connected: ${socket?.id()}")
                 // Join user room
-                socket.emit("join", userId)
+                socket?.emit("join", userId)
             }
 
             // Listen for incoming messages
-            socket.on("receiveMessage") { args ->
+            socket?.on("receiveMessage") { args ->
                 val msgJson = args[0] as JSONObject
                 val senderIdFromMsg = msgJson.getString("senderId")
                 val serverMessageId = msgJson.getString("_id")
@@ -128,7 +163,7 @@ class ChatViewModel(
 
                 _messages.add(msg)
             }
-            socket.on("messageReaction") { args ->
+            socket?.on("messageReaction") { args ->
 
                 val json = args[0] as JSONObject
                 val messageId = json.getString("_id")
@@ -142,7 +177,7 @@ class ChatViewModel(
                 }
             }
 
-            socket.on("messageDeleted") { args ->
+            socket?.on("messageDeleted") { args ->
                 val data = args[0] as JSONObject
                 val messageId = data.getString("messageId")
 
@@ -264,7 +299,30 @@ class ChatViewModel(
             _messages.add(msg)
 
             // Send to server
-            socket.emit("sendMessage", json)
+            socket?.emit("sendMessage", json)
+        }
+    }
+
+    fun startCall(context: Context, roomId: String, type: String) {
+        val sharedPref = context?.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val jwtToken = sharedPref?.getString("jwt_token", null) ?: ""
+        try {
+            val options = JitsiMeetConferenceOptions.Builder()
+                .setServerURL(URL("https://meet.jit.si"))
+                .setRoom(roomId)
+                .setAudioMuted(false)
+                .setVideoMuted(type == "audio")
+                .setFeatureFlag("chat.enabled", false)
+                .setFeatureFlag("invite.enabled", false)
+                .setFeatureFlag("welcomepage.enabled", false)    // skip welcome/join page
+                .setFeatureFlag("lobby.enabled", false)          // disable lobby
+                .setFeatureFlag("prejoinpage.enabled", false)
+                .setToken(jwtToken)
+                .build()
+
+            JitsiMeetActivity.launch(context, options)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -278,7 +336,7 @@ class ChatViewModel(
                 put("receiverId", otherUserId)
                 put("message", encrypted)
             }
-            socket.emit("sendMessage", json)
+            socket?.emit("sendMessage", json)
             
             if (command == "CALL_REQUEST") {
                 _outgoingCallType.value = type
@@ -349,7 +407,7 @@ class ChatViewModel(
             put("receiverId", otherUserId)
         }
 
-        socket.emit("reactMessage", json)
+        socket?.emit("reactMessage", json)
     }
 
     fun deleteMessage(messageId: String) {
@@ -359,7 +417,7 @@ class ChatViewModel(
             "receiverId" to otherUserId
         )
 
-        socket.emit("deleteMessage", JSONObject(data))
+        socket?.emit("deleteMessage", JSONObject(data))
     }
 
     fun clearReply() {
@@ -368,7 +426,7 @@ class ChatViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        socket.disconnect()
+        socket?.disconnect()
     }
 }
 
