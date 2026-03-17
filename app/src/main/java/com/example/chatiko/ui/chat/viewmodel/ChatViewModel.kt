@@ -17,9 +17,11 @@ import com.example.chatiko.network.SocketManager
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.launch
-import org.jitsi.meet.sdk.JitsiMeetActivity
-import org.jitsi.meet.sdk.JitsiMeetConferenceOptions
 import org.json.JSONObject
+import org.webrtc.IceCandidate
+import org.webrtc.SessionDescription
+import org.webrtc.VideoTrack
+import com.example.chatiko.ui.chat.WebRtcManager
 import java.net.URL
 import java.security.KeyFactory
 import java.security.PublicKey
@@ -50,6 +52,15 @@ class ChatViewModel(
 
     private val _callDeclined = mutableStateOf(false)
     val callDeclined: State<Boolean> = _callDeclined
+
+    private val _activeCallType = mutableStateOf<String?>(null)
+    val activeCallType: State<String?> = _activeCallType
+
+    // WebRTC related UI state
+    val remoteVideoTrack = mutableStateOf<VideoTrack?>(null)
+
+    var webRtcManager: WebRtcManager? = null
+
     private var socket: Socket? = SocketManager.getSocket()
 
 //    private lateinit var socket: Socket
@@ -145,8 +156,37 @@ class ChatViewModel(
 
                 if (messageText.startsWith("CALL_DECLINED:")) {
                     _callDeclined.value = true
-                    // Reset outgoing call state since it was declined
                     _outgoingCallType.value = null
+                    endCall()
+                    return@on
+                }
+
+                if (messageText.startsWith("WEBRTC_OFFER:")) {
+                    val sdp = messageText.removePrefix("WEBRTC_OFFER:")
+                    webRtcManager?.setRemoteDescription(SessionDescription(SessionDescription.Type.OFFER, sdp))
+                    webRtcManager?.createAnswer()
+                    return@on
+                }
+
+                if (messageText.startsWith("WEBRTC_ANSWER:")) {
+                    val sdp = messageText.removePrefix("WEBRTC_ANSWER:")
+                    webRtcManager?.setRemoteDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp))
+                    return@on
+                }
+
+                if (messageText.startsWith("WEBRTC_ICE:")) {
+                    val parts = messageText.removePrefix("WEBRTC_ICE:").split("|")
+                    if (parts.size == 3) {
+                        try {
+                            val candidate = IceCandidate(parts[0], parts[1].toInt(), parts[2])
+                            webRtcManager?.addIceCandidate(candidate)
+                        } catch (e: Exception) { Log.e("WebRTC", "Ice Error", e) }
+                    }
+                    return@on
+                }
+
+                if (messageText.startsWith("WEBRTC_END:")) {
+                    endCall()
                     return@on
                 }
 
@@ -237,7 +277,9 @@ class ChatViewModel(
 
                     if (decrypted.startsWith("CALL_REQUEST:") || 
                         decrypted.startsWith("CALL_ACCEPTED:") || 
-                        decrypted.startsWith("CALL_DECLINED:")) {
+                        decrypted.startsWith("CALL_DECLINED:") ||
+                        decrypted.startsWith("WEBRTC_")
+                    ) {
                         return@map null
                     }
 
@@ -304,26 +346,7 @@ class ChatViewModel(
     }
 
     fun startCall(context: Context, roomId: String, type: String) {
-        val sharedPref = context?.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        val jwtToken = sharedPref?.getString("jwt_token", null) ?: ""
-        try {
-            val options = JitsiMeetConferenceOptions.Builder()
-                .setServerURL(URL("https://meet.jit.si"))
-                .setRoom(roomId)
-                .setAudioMuted(false)
-                .setVideoMuted(type == "audio")
-                .setFeatureFlag("chat.enabled", false)
-                .setFeatureFlag("invite.enabled", false)
-                .setFeatureFlag("welcomepage.enabled", false)    // skip welcome/join page
-                .setFeatureFlag("lobby.enabled", false)          // disable lobby
-                .setFeatureFlag("prejoinpage.enabled", false)
-                .setToken(jwtToken)
-                .build()
-
-            JitsiMeetActivity.launch(context, options)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        // Obsolete function - WebRTC uses startWebRtcCall instead
     }
 
     fun sendCallSignaling(command: String, type: String = "") {
@@ -351,6 +374,61 @@ class ChatViewModel(
         _outgoingCallType.value = null
         _callAccepted.value = null
         _callDeclined.value = false
+    }
+
+    // --- WebRTC Functions ---
+    fun initWebRtc(context: Context) {
+        if (webRtcManager == null) {
+            webRtcManager = WebRtcManager(context, object : WebRtcManager.WebRtcListener {
+                override fun onIceCandidate(candidate: IceCandidate) {
+                    sendWebRtcSignaling("WEBRTC_ICE:${candidate.sdpMid}|${candidate.sdpMLineIndex}|${candidate.sdp}")
+                }
+                override fun onOfferReady(sessionDescription: SessionDescription) {
+                    sendWebRtcSignaling("WEBRTC_OFFER:${sessionDescription.description}")
+                }
+                override fun onAnswerReady(sessionDescription: SessionDescription) {
+                    sendWebRtcSignaling("WEBRTC_ANSWER:${sessionDescription.description}")
+                }
+                override fun onRemoteTrackAdded(track: VideoTrack) {
+                    remoteVideoTrack.value = track
+                }
+            })
+        }
+    }
+
+    private fun sendWebRtcSignaling(msg: String) {
+        viewModelScope.launch {
+            val receiverPublicKey = getReceiverPublicKey() ?: return@launch
+            val encrypted = encryptMessage(msg, receiverPublicKey)
+            val json = JSONObject().apply {
+                put("senderId", userId)
+                put("receiverId", otherUserId)
+                put("message", encrypted)
+            }
+            socket?.emit("sendMessage", json)
+        }
+    }
+
+    fun startWebRtcCall(isVideo: Boolean) {
+        _activeCallType.value = if (isVideo) "video" else "audio"
+        webRtcManager?.createPeerConnection(isVideo)
+        webRtcManager?.createOffer()
+    }
+
+    fun acceptWebRtcCall(isVideo: Boolean) {
+        _activeCallType.value = if (isVideo) "video" else "audio"
+        webRtcManager?.createPeerConnection(isVideo)
+        // Set remote desc should have been called when OFFER was received.
+        // The ICE candidates will flow.
+    }
+
+    fun endCall() {
+        sendWebRtcSignaling("WEBRTC_END:")      
+        webRtcManager?.destroy()
+        webRtcManager = null
+        _activeCallType.value = null
+        remoteVideoTrack.value = null
+        resetCallStates()
     }
 
     fun setReply(message: MessageDto) {

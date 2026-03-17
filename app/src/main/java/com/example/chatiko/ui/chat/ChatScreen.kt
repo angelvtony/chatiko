@@ -1,7 +1,10 @@
 package com.example.chatiko.ui.chat
 
+import android.Manifest
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -64,7 +67,6 @@ import androidx.navigation.NavController
 import com.example.chatiko.network.MessageDto
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModel
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModelFactory
-import org.jitsi.meet.sdk.JitsiMeetConferenceOptions
 
 
 @Composable
@@ -96,31 +98,36 @@ fun ChatScreen(
         "chatiko_random_room"
     }
 
-    // Launch Jitsi when call is accepted
-    val jaasToken = remember { mutableStateOf<String?>(null) }
+    val activeCallType by viewModel.activeCallType
 
-// Before launching call, fetch token from your server
-    LaunchedEffect(callAccepted) {
-        if (callAccepted != null && jaasToken.value != null) {
-            try {
-                val options = JitsiMeetConferenceOptions.Builder()
-                    .setRoom("chatiko_$sharedRoomId")
-                    .setAudioMuted(false)
-                    .setVideoMuted(callAccepted == "audio")
-                    .setFeatureFlag("chat.enabled", false)
-                    .setFeatureFlag("invite.enabled", false)
-                    .setFeatureFlag("welcomepage.enabled", false)
-                    .setFeatureFlag("lobby.enabled", false)
-                    .setFeatureFlag("prejoinpage.enabled", false)
-                    .setToken(jaasToken.value)
-                    .build()
-                org.jitsi.meet.sdk.JitsiMeetActivity.launch(context, options)
-                viewModel.resetCallStates()
-            } catch (e: Exception) {
-                Toast.makeText(context, "Error launching call", Toast.LENGTH_SHORT).show()
-            }
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.values.all { it }
+        if (!granted) {
+            Toast.makeText(context, "Camera & Mic permissions are required for calling", Toast.LENGTH_SHORT).show()
         }
     }
+
+    // Initialize WebRTC and request permissions
+    LaunchedEffect(Unit) {
+        viewModel.initWebRtc(context)
+        permissionsLauncher.launch(
+            arrayOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.RECORD_AUDIO
+            )
+        )
+    }
+
+    if (activeCallType != null) {
+        WebRtcCallScreen(
+            viewModel = viewModel,
+            callType = activeCallType!!,
+            onEndCall = { viewModel.endCall() }
+        )
+    } else {
+        // Only show Chat Screen if no active call
 
     Scaffold(
         topBar = { ChatTopBar(username, viewModel) },
@@ -167,6 +174,7 @@ fun ChatScreen(
             }
         }
     }
+    } // End of activeCallType else branch
 
     // Show Dialogs
     if (incomingCallType != null) {
@@ -175,23 +183,7 @@ fun ChatScreen(
             callType = incomingCallType!!,
             onAccept = {
                 viewModel.sendCallSignaling("CALL_ACCEPTED", incomingCallType!!)
-                // The receiver will launch Jitsi directly from here too
-                try {
-                    val options = org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
-                        .setRoom("chatiko_$sharedRoomId")
-                        .setAudioMuted(false)
-                        .setVideoMuted(incomingCallType == "audio")
-                        .setFeatureFlag("chat.enabled", false)
-                        .setFeatureFlag("invite.enabled", false)
-                        .setFeatureFlag("welcomepage.enabled", false)    // skip welcome/join page
-                        .setFeatureFlag("lobby.enabled", false)          // disable lobby
-                        .setFeatureFlag("prejoinpage.enabled", false)
-                        .setToken(token)
-                        .build()
-                    org.jitsi.meet.sdk.JitsiMeetActivity.launch(context, options)
-                } catch(e: Exception) {
-                    android.widget.Toast.makeText(context, "Error joining call", android.widget.Toast.LENGTH_SHORT).show()
-                }
+                viewModel.acceptWebRtcCall(incomingCallType == "video")
                 viewModel.resetCallStates()
             },
             onDecline = {
@@ -240,11 +232,13 @@ fun ChatTopBar(username: String?, viewModel: ChatViewModel) {
         actions = {
             IconButton(onClick = { 
                 viewModel.sendCallSignaling("CALL_REQUEST", "video")
+                viewModel.startWebRtcCall(true)
             }) {
                 Icon(Icons.Filled.Videocam, contentDescription = "Video Call")
             }
             IconButton(onClick = { 
                 viewModel.sendCallSignaling("CALL_REQUEST", "audio")
+                viewModel.startWebRtcCall(false)
             }) {
                 Icon(Icons.Filled.Call, contentDescription = "Call")
             }
