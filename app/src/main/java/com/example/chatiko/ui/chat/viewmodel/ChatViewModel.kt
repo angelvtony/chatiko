@@ -1,8 +1,10 @@
 package com.example.chatiko.ui.chat.viewmodel
 
+import android.R.attr.text
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -35,59 +37,34 @@ class ChatViewModel(
     private val otherUserId: String?
 ) : ViewModel() {
 
+    // --- Chat State ---
     private val _messages = mutableStateListOf<MessageDto>()
     val messages: List<MessageDto> = _messages
 
     private val _replyingTo = mutableStateOf<MessageDto?>(null)
-    val replyingTo: State<MessageDto?> = _replyingTo
+    val replyingTo: MutableState<MessageDto?> = _replyingTo
 
     private val _incomingCallType = mutableStateOf<String?>(null)
-    val incomingCallType: State<String?> = _incomingCallType
+    val incomingCallType: MutableState<String?> = _incomingCallType
 
     private val _outgoingCallType = mutableStateOf<String?>(null)
-    val outgoingCallType: State<String?> = _outgoingCallType
+    val outgoingCallType: MutableState<String?> = _outgoingCallType
 
     private val _callAccepted = mutableStateOf<String?>(null)
-    val callAccepted: State<String?> = _callAccepted
+    val callAccepted: MutableState<String?> = _callAccepted
 
     private val _callDeclined = mutableStateOf(false)
-    val callDeclined: State<Boolean> = _callDeclined
+    val callDeclined: MutableState<Boolean> = _callDeclined
 
     private val _activeCallType = mutableStateOf<String?>(null)
-    val activeCallType: State<String?> = _activeCallType
+    val activeCallType: MutableState<String?> = _activeCallType
 
-    // WebRTC related UI state
     val remoteVideoTrack = mutableStateOf<VideoTrack?>(null)
 
     var webRtcManager: WebRtcManager? = null
-
     private var socket: Socket? = SocketManager.getSocket()
 
-//    private lateinit var socket: Socket
-
-    fun sendCall(receiverId: String, type: String) {
-        val data = JSONObject()
-        data.put("senderId", userId)
-        data.put("receiverId", receiverId)
-        data.put("type", type)
-        socket?.emit("callRequest", data)
-    }
-
-    fun acceptCall(senderId: String, type: String) {
-        val data = JSONObject()
-        data.put("senderId", senderId)
-        data.put("receiverId", userId)
-        data.put("type", type)
-        socket?.emit("callAccepted", data)
-    }
-
-    fun declineCall(senderId: String) {
-        val data = JSONObject()
-        data.put("senderId", senderId)
-        data.put("receiverId", userId)
-        socket?.emit("callDeclined", data)
-    }
-
+    // --- Initialization ---
     init {
         CryptoManager.generateKeyPair()
         uploadPublicKey()
@@ -102,181 +79,116 @@ class ChatViewModel(
         }
     }
 
+    // --- Socket Setup ---
     private fun connectSocket() {
         try {
-            val opts = IO.Options()
-            opts.forceNew = true
-            opts.reconnection = true
-            socket = IO.socket("http://10.63.1.4:3000", opts) // Replace with your server IP
-
-            socket?.connect()
-
-            socket?.on(Socket.EVENT_CONNECT) {
-                Log.d("ChatVM", "Socket connected: ${socket?.id()}")
-                // Join user room
-                socket?.emit("join", userId)
+            val opts = IO.Options().apply {
+                forceNew = true
+                reconnection = true
             }
+            socket = IO.socket("http://10.63.1.4:3000", opts)
+            socket?.connect()
+            socket?.on(Socket.EVENT_CONNECT) { socket?.emit("join", userId) }
 
-            // Listen for incoming messages
             socket?.on("receiveMessage") { args ->
                 val msgJson = args[0] as JSONObject
                 val senderIdFromMsg = msgJson.getString("senderId")
                 val serverMessageId = msgJson.getString("_id")
 
                 if (senderIdFromMsg == userId) {
-                    // Update the temp message ID to server-generated ID
                     val index = _messages.indexOfFirst { it.id.startsWith("temp-") }
-                    if (index != -1) {
-                        val oldMsg = _messages[index]
-                        _messages[index] = oldMsg.copy(id = serverMessageId)
-                    }
+                    if (index != -1) _messages[index] = _messages[index].copy(id = serverMessageId)
                     return@on
                 }
 
-                // Message from other user — decrypt it
-                val encryptedMessage = msgJson.getString("message")
-                val messageText: String = try {
-                    decryptMessage(encryptedMessage)
+                try {
+                    val payloadObj = JSONObject(msgJson.getString("message"))
+                    val payload = CryptoManager.EncryptedPayload(
+                        encryptedKey = payloadObj.getString("encryptedKey"),
+                        encryptedMessage = payloadObj.getString("encryptedMessage"),
+                        iv = payloadObj.getString("iv")
+                    )
+                    val messageText = CryptoManager.decryptMessageHybrid(payload)
+                    handleIncomingMessage(messageText, msgJson, serverMessageId, senderIdFromMsg)
                 } catch (e: Exception) {
-                    Log.e("CHAT", "Decryption failed", e)
-                    encryptedMessage
+                    Log.e("CHAT", "Failed to decrypt message", e)
                 }
+            }
 
-                if (messageText.startsWith("CALL_REQUEST:")) {
-                    val type = messageText.removePrefix("CALL_REQUEST:")
-                    _incomingCallType.value = type
-                    return@on
-                }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
 
-                if (messageText.startsWith("CALL_ACCEPTED:")) {
-                    val type = messageText.removePrefix("CALL_ACCEPTED:")
-                    _callAccepted.value = type
-                    return@on
-                }
-
-                if (messageText.startsWith("CALL_DECLINED:")) {
-                    _callDeclined.value = true
-                    _outgoingCallType.value = null
-                    endCall()
-                    return@on
-                }
-
-                if (messageText.startsWith("WEBRTC_OFFER:")) {
-                    val sdp = messageText.removePrefix("WEBRTC_OFFER:")
-                    webRtcManager?.setRemoteDescription(SessionDescription(SessionDescription.Type.OFFER, sdp))
-                    webRtcManager?.createAnswer()
-                    return@on
-                }
-
-                if (messageText.startsWith("WEBRTC_ANSWER:")) {
-                    val sdp = messageText.removePrefix("WEBRTC_ANSWER:")
-                    webRtcManager?.setRemoteDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp))
-                    return@on
-                }
-
-                if (messageText.startsWith("WEBRTC_ICE:")) {
-                    val parts = messageText.removePrefix("WEBRTC_ICE:").split("|")
-                    if (parts.size == 3) {
-                        try {
-                            val candidate = IceCandidate(parts[0], parts[1].toInt(), parts[2])
-                            webRtcManager?.addIceCandidate(candidate)
-                        } catch (e: Exception) { Log.e("WebRTC", "Ice Error", e) }
-                    }
-                    return@on
-                }
-
-                if (messageText.startsWith("WEBRTC_END:")) {
-                    endCall()
-                    return@on
-                }
-
-                val msg = MessageDto(
+    private fun handleIncomingMessage(messageText: String, msgJson: JSONObject, serverMessageId: String, senderId: String) {
+        when {
+            messageText.startsWith("CALL_REQUEST:") -> _incomingCallType.value = messageText.removePrefix("CALL_REQUEST:")
+            messageText.startsWith("CALL_ACCEPTED:") -> _callAccepted.value = messageText.removePrefix("CALL_ACCEPTED:")
+            messageText.startsWith("CALL_DECLINED:") -> {
+                _callDeclined.value = true
+                _outgoingCallType.value = null
+                endCall()
+            }
+            messageText.startsWith("WEBRTC_") -> handleWebRtcMessage(messageText)
+            else -> _messages.add(
+                MessageDto(
                     id = serverMessageId,
                     message = messageText,
                     isMe = false,
-                    senderId = senderIdFromMsg,
+                    senderId = senderId,
                     receiverId = msgJson.getString("receiverId"),
                     reaction = msgJson.optString("reaction", null),
                     replyTo = null,
                     createdAt = msgJson.optString("createdAt", "")
                 )
-
-                _messages.add(msg)
-            }
-            socket?.on("messageReaction") { args ->
-
-                val json = args[0] as JSONObject
-                val messageId = json.getString("_id")
-                val reaction = json.optString("reaction")
-
-                val index = _messages.indexOfFirst { it.id == messageId }
-
-                if (index != -1) {
-                    val oldMessage = _messages[index]
-                    _messages[index] = oldMessage.copy(reaction = reaction)
-                }
-            }
-
-            socket?.on("messageDeleted") { args ->
-                val data = args[0] as JSONObject
-                val messageId = data.getString("messageId")
-
-                _messages.removeAll { it.id == messageId }
-            }
-
-        } catch (e: Exception) {
-            e.printStackTrace()
+            )
         }
     }
 
+    private fun handleWebRtcMessage(message: String) {
+        when {
+            message.startsWith("WEBRTC_OFFER:") -> {
+                val sdp = message.removePrefix("WEBRTC_OFFER:")
+                webRtcManager?.setRemoteDescription(SessionDescription(SessionDescription.Type.OFFER, sdp))
+                webRtcManager?.createAnswer()
+            }
+            message.startsWith("WEBRTC_ANSWER:") -> {
+                val sdp = message.removePrefix("WEBRTC_ANSWER:")
+                webRtcManager?.setRemoteDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp))
+            }
+            message.startsWith("WEBRTC_ICE:") -> {
+                val parts = message.removePrefix("WEBRTC_ICE:").split("|")
+                if (parts.size == 3) webRtcManager?.addIceCandidate(IceCandidate(parts[0], parts[1].toInt(), parts[2]))
+            }
+            message.startsWith("WEBRTC_END:") -> endCall()
+        }
+    }
+
+    // --- Public Key Upload ---
     private fun uploadPublicKey() {
-
         viewModelScope.launch {
-
-            try{
-
-                val sharedPref = context?.getSharedPreferences(
-                    "user_prefs",
-                    Context.MODE_PRIVATE
-                )
-
-                val jwtToken = sharedPref?.getString("jwt_token",null)
-
+            try {
+                val sharedPref = context?.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                val jwtToken = sharedPref?.getString("jwt_token", null)
                 val authHeader = "Bearer $jwtToken"
-
                 val key = CryptoManager.getPublicKeyString()
-
-                RetrofitClient.instance.uploadPublicKey(
-                    PublicKeyRequest(key),
-                    authHeader
-                )
-
-            }catch(e:Exception){
-                e.printStackTrace()
-            }
-
+                RetrofitClient.instance.uploadPublicKey(PublicKeyRequest(key), authHeader)
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
+    // --- Chat History ---
     private fun fetchChatHistory() {
         viewModelScope.launch {
             try {
-                val sharedPref = context?.getSharedPreferences(
-                    "user_prefs",
-                    Context.MODE_PRIVATE
-                )
-
-                val jwtToken =
-                    sharedPref?.getString("jwt_token", null)
+                val sharedPref = context?.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                val jwtToken = sharedPref?.getString("jwt_token", null)
                 val authHeader = "Bearer $jwtToken"
-                val response = RetrofitClient.instance.getMessages(otherUserId, authHeader) // Make sure this is correct in your interface
+                val response = RetrofitClient.instance.getMessages(otherUserId, authHeader)
                 _messages.addAll(response.map {
 
-                    val decrypted =
-                        decryptMessage(it.message ?: "")
+                    val decrypted = decryptMessage(it.message ?: "")
 
-                    if (decrypted.startsWith("CALL_REQUEST:") || 
-                        decrypted.startsWith("CALL_ACCEPTED:") || 
+                    if (decrypted.startsWith("CALL_REQUEST:") ||
+                        decrypted.startsWith("CALL_ACCEPTED:") ||
                         decrypted.startsWith("CALL_DECLINED:") ||
                         decrypted.startsWith("WEBRTC_")
                     ) {
@@ -300,83 +212,71 @@ class ChatViewModel(
         }
     }
 
-    fun encryptMessage(message: String, publicKey: PublicKey): String {
-
+    fun decryptMessage(encrypted: String): String {
         val cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
-        cipher.init(Cipher.ENCRYPT_MODE, publicKey)
-
-        val encryptedBytes = cipher.doFinal(message.toByteArray())
-
-        return Base64.encodeToString(encryptedBytes, Base64.DEFAULT)
+        cipher.init(Cipher.DECRYPT_MODE, CryptoManager.getPrivateKey())
+        val decoded = Base64.decode(encrypted, Base64.DEFAULT)
+        val decryptedBytes = cipher.doFinal(decoded)
+        return String(decryptedBytes)
     }
 
-    fun sendMessage(text: String) {
-        viewModelScope.launch {
-            val receiverPublicKey = getReceiverPublicKey()
-            if (receiverPublicKey == null) {
-                Log.e("CHAT", "Receiver public key missing")
-                return@launch
-            }
+    // --- Message Sending ---
+    fun sendMessage(text: String) = viewModelScope.launch {
+        val receiverPublicKey = getReceiverPublicKey() ?: return@launch
+        val payload = CryptoManager.encryptMessageHybrid(text, receiverPublicKey)
 
-            val encrypted = encryptMessage(text, receiverPublicKey)
-
-            val json = JSONObject().apply {
-                put("senderId", userId)
-                put("receiverId", otherUserId)
-                put("message", encrypted)
-            }
-
-            // Add to local messages immediately
-            val tempId = "temp-${System.currentTimeMillis()}"
-            val msg = MessageDto(
-                id = tempId,
-                message = text,  // plain text for sender
-                isMe = true,
-                senderId = userId!!,
-                receiverId = otherUserId!!,
-                reaction = null,
-                replyTo = null,
-                createdAt = System.currentTimeMillis().toString()
-            )
-            _messages.add(msg)
-
-            // Send to server
-            socket?.emit("sendMessage", json)
+        val json = JSONObject().apply {
+            put("senderId", userId)
+            put("receiverId", otherUserId)
+            put("message", JSONObject().apply {
+                put("encryptedKey", payload.encryptedKey)
+                put("encryptedMessage", payload.encryptedMessage)
+                put("iv", payload.iv)
+            }.toString())
         }
+
+        val tempId = "temp-${System.currentTimeMillis()}"
+        val msg = MessageDto(
+            id = tempId,
+            message = text,
+            isMe = true,
+            senderId = userId!!,
+            receiverId = otherUserId!!,
+            reaction = null,
+            replyTo = null,
+            createdAt = System.currentTimeMillis().toString()
+        )
+        _messages.add(msg)
+
+        socket?.emit("sendMessage", json)
     }
 
-    fun startCall(context: Context, roomId: String, type: String) {
-        // Obsolete function - WebRTC uses startWebRtcCall instead
+    // --- Call & WebRTC Signaling ---
+    fun sendCallSignaling(command: String, type: String = "") = viewModelScope.launch {
+        val msg = if (type.isNotEmpty()) "$command:$type" else command
+        sendHybridSignaling(msg)
+        if (command == "CALL_REQUEST") _outgoingCallType.value = type
+        else if (command == "CALL_ACCEPTED" || command == "CALL_DECLINED") _incomingCallType.value = null
     }
 
-    fun sendCallSignaling(command: String, type: String = "") {
-        viewModelScope.launch {
-            val receiverPublicKey = getReceiverPublicKey() ?: return@launch
-            val signalMsg = if (type.isNotEmpty()) "$command:$type" else command
-            val encrypted = encryptMessage(signalMsg, receiverPublicKey)
-            val json = JSONObject().apply {
-                put("senderId", userId)
-                put("receiverId", otherUserId)
-                put("message", encrypted)
-            }
-            socket?.emit("sendMessage", json)
-            
-            if (command == "CALL_REQUEST") {
-                _outgoingCallType.value = type
-            } else if (command == "CALL_ACCEPTED" || command == "CALL_DECLINED") {
-                _incomingCallType.value = null
-            }
+    private fun sendHybridSignaling(msg: String) = viewModelScope.launch {
+        val receiverPublicKey = getReceiverPublicKey() ?: return@launch
+        val payload = CryptoManager.encryptMessageHybrid(msg, receiverPublicKey)
+
+        val json = JSONObject().apply {
+            put("senderId", userId)
+            put("receiverId", otherUserId)
+            put("message", JSONObject().apply {
+                put("encryptedKey", payload.encryptedKey)
+                put("encryptedMessage", payload.encryptedMessage)
+                put("iv", payload.iv)
+            }.toString())
         }
-    }
-    
-    fun resetCallStates() {
-        _incomingCallType.value = null
-        _outgoingCallType.value = null
-        _callAccepted.value = null
-        _callDeclined.value = false
+
+        socket?.emit("sendMessage", json)
     }
 
-    // --- WebRTC Functions ---
+    // --- WebRTC Management ---
     fun initWebRtc(context: Context) {
         if (webRtcManager == null) {
             webRtcManager = WebRtcManager(context, object : WebRtcManager.WebRtcListener {
@@ -396,17 +296,21 @@ class ChatViewModel(
         }
     }
 
-    private fun sendWebRtcSignaling(msg: String) {
-        viewModelScope.launch {
-            val receiverPublicKey = getReceiverPublicKey() ?: return@launch
-            val encrypted = encryptMessage(msg, receiverPublicKey)
-            val json = JSONObject().apply {
-                put("senderId", userId)
-                put("receiverId", otherUserId)
-                put("message", encrypted)
-            }
-            socket?.emit("sendMessage", json)
+    private fun sendWebRtcSignaling(msg: String) = viewModelScope.launch {
+        val receiverPublicKey = getReceiverPublicKey() ?: return@launch
+        val payload = CryptoManager.encryptMessageHybrid(msg, receiverPublicKey)
+
+        val json = JSONObject().apply {
+            put("senderId", userId)
+            put("receiverId", otherUserId)
+            put("message", JSONObject().apply {
+                put("encryptedKey", payload.encryptedKey)
+                put("encryptedMessage", payload.encryptedMessage)
+                put("iv", payload.iv)
+            }.toString())
         }
+
+        socket?.emit("sendMessage", json)
     }
 
     fun startWebRtcCall(isVideo: Boolean) {
@@ -418,12 +322,11 @@ class ChatViewModel(
     fun acceptWebRtcCall(isVideo: Boolean) {
         _activeCallType.value = if (isVideo) "video" else "audio"
         webRtcManager?.createPeerConnection(isVideo)
-        // Set remote desc should have been called when OFFER was received.
-        // The ICE candidates will flow.
+        // Remote SDP should already be set
     }
 
     fun endCall() {
-        sendWebRtcSignaling("WEBRTC_END:")      
+        sendHybridSignaling("WEBRTC_END:")
         webRtcManager?.destroy()
         webRtcManager = null
         _activeCallType.value = null
@@ -431,8 +334,14 @@ class ChatViewModel(
         resetCallStates()
     }
 
-    fun setReply(message: MessageDto) {
-        _replyingTo.value = message
+    // --- Utilities ---
+    fun setReply(message: MessageDto) { _replyingTo.value = message }
+
+    fun resetCallStates() {
+        _incomingCallType.value = null
+        _outgoingCallType.value = null
+        _callAccepted.value = null
+        _callDeclined.value = false
     }
 
     private suspend fun getReceiverPublicKey(): PublicKey? {
@@ -441,50 +350,24 @@ class ChatViewModel(
             val jwtToken = sharedPref?.getString("jwt_token", null) ?: return null
             val authHeader = "Bearer $jwtToken"
             val response = RetrofitClient.instance.getUserPublicKey(otherUserId, authHeader)
-
-            val keyString = response.publicKey
-            Log.d("DEBUG_KEY", "Receiver public key (raw): $keyString")
-
-            if (keyString == null) {
-                Log.w("DEBUG_KEY", "Receiver public key is null!")
-                return null
-            }
-
+            val keyString = response.publicKey ?: return null
             val decoded = Base64.decode(keyString, Base64.DEFAULT)
             val factory = KeyFactory.getInstance("RSA")
             val spec = X509EncodedKeySpec(decoded)
-            val publicKey = factory.generatePublic(spec)
-            Log.d("DEBUG_KEY", "Receiver public key successfully decoded: $publicKey")
-            publicKey
+            factory.generatePublic(spec)
         } catch (e: Exception) {
             Log.e("DEBUG_KEY", "Failed to get receiver key: ${e.message}")
             null
         }
     }
 
-    fun decryptMessage(encrypted: String): String {
-
-        val cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
-
-        cipher.init(Cipher.DECRYPT_MODE, CryptoManager.getPrivateKey())
-
-        val decoded = Base64.decode(encrypted, Base64.DEFAULT)
-
-        val decryptedBytes = cipher.doFinal(decoded)
-
-        return String(decryptedBytes)
-    }
-
     fun reactToMessage(messageId: String, reaction: String) {
-
         val json = JSONObject().apply {
-
             put("messageId", messageId)
             put("reaction", reaction)
             put("senderId", userId)
             put("receiverId", otherUserId)
         }
-
         socket?.emit("reactMessage", json)
     }
 
@@ -494,13 +377,10 @@ class ChatViewModel(
             "senderId" to userId,
             "receiverId" to otherUserId
         )
-
         socket?.emit("deleteMessage", JSONObject(data))
     }
 
-    fun clearReply() {
-        _replyingTo.value = null
-    }
+    fun clearReply() { _replyingTo.value = null }
 
     override fun onCleared() {
         super.onCleared()
@@ -508,6 +388,7 @@ class ChatViewModel(
     }
 }
 
+// --- Factory ---
 class ChatViewModelFactory(
     private val context: Context?,
     private val userId: String?,
