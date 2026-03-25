@@ -32,7 +32,7 @@ fun LoginScreen(navController: NavController?) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             Box(
                 modifier = Modifier
@@ -75,14 +75,14 @@ fun LoginScreen(navController: NavController?) {
                     text = "Stay Anonymous.",
                     fontSize = 34.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF111111),
+                    color = MaterialTheme.colorScheme.onBackground,
                     letterSpacing = (-0.5).sp
                 )
                 Text(
                     text = "Feel Connected.",
                     fontSize = 34.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF111111),
+                    color = MaterialTheme.colorScheme.onBackground,
                     letterSpacing = (-0.5).sp
                 )
 
@@ -91,7 +91,7 @@ fun LoginScreen(navController: NavController?) {
                 Text(
                     text = "No profiles, no usernames,\nno pressure.",
                     fontSize = 18.sp,
-                    color = Color(0xFF333333),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     lineHeight = 26.sp
@@ -132,7 +132,7 @@ fun LoginScreen(navController: NavController?) {
                         )
                         .background(
                             brush = Brush.horizontalGradient(
-                                colors = listOf(Color(0xFFFFFFFF), Color(0xFFFCFCFC))
+                                colors = listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant)
                             ),
                             shape = MaterialTheme.shapes.extraLarge
                         )
@@ -148,7 +148,7 @@ fun LoginScreen(navController: NavController?) {
 
                         Text(
                             text = "Continue with Google",
-                            color = Color.Black
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -157,7 +157,7 @@ fun LoginScreen(navController: NavController?) {
                     modifier = Modifier.padding(0.dp,28.dp,0.dp,0.dp),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Light,
-                    color = Color(0xFF111111),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                     letterSpacing = (-0.5).sp
                 )
             }

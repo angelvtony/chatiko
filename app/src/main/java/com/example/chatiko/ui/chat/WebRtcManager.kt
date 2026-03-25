@@ -59,6 +59,7 @@ class WebRtcManager(private val context: Context, private val webRtcListener: We
         view.init(eglBase.eglBaseContext, null)
         view.setMirror(true)
         view.setEnableHardwareScaler(true)
+        view.setZOrderMediaOverlay(true)
     }
 
     fun initRemoteSurfaceView(view: SurfaceViewRenderer) {
@@ -67,7 +68,7 @@ class WebRtcManager(private val context: Context, private val webRtcListener: We
         view.setEnableHardwareScaler(true)
     }
 
-    fun startLocalVideo(view: SurfaceViewRenderer, isVideoCall: Boolean) {
+    fun prepareMedia(isVideoCall: Boolean) {
         val audioConstraints = MediaConstraints()
         localAudioSource = factory?.createAudioSource(audioConstraints)
         localAudioTrack = factory?.createAudioTrack("local_audio", localAudioSource)
@@ -79,10 +80,9 @@ class WebRtcManager(private val context: Context, private val webRtcListener: We
             
             val surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
             videoCapturer?.initialize(surfaceTextureHelper, context, localVideoSource!!.capturerObserver)
-            videoCapturer?.startCapture(1024, 720, 30)
+            videoCapturer?.startCapture(640, 480, 30)
 
             localVideoTrack = factory?.createVideoTrack("local_video", localVideoSource)
-            localVideoTrack?.addSink(view)
         }
         
         // Setup initial audio routing
@@ -91,6 +91,10 @@ class WebRtcManager(private val context: Context, private val webRtcListener: We
         
         audioManager?.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
         audioManager?.isSpeakerphoneOn = isVideoCall // Speaker for video, earpiece for audio
+    }
+
+    fun startLocalVideo(view: SurfaceViewRenderer) {
+        localVideoTrack?.addSink(view)
     }
 
     fun toggleMute(isMuted: Boolean) {
@@ -108,7 +112,11 @@ class WebRtcManager(private val context: Context, private val webRtcListener: We
     }
 
     private fun createCameraCapturer(): VideoCapturer? {
-        val enumerator = Camera2Enumerator(context)
+        val enumerator = if (Camera2Enumerator.isSupported(context)) {
+            Camera2Enumerator(context)
+        } else {
+            Camera1Enumerator(true)
+        }
         val deviceNames = enumerator.deviceNames
         // Try front camera
         for (deviceName in deviceNames) {
@@ -202,12 +210,12 @@ class WebRtcManager(private val context: Context, private val webRtcListener: We
         }, mediaConstraints)
     }
 
-    fun setRemoteDescription(sdp: SessionDescription) {
+    fun setRemoteDescription(sdp: SessionDescription, onSuccess: () -> Unit) {
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {}
-            override fun onSetSuccess() {}
-            override fun onCreateFailure(error: String?) {}
-            override fun onSetFailure(error: String?) {}
+            override fun onSetSuccess() { onSuccess() }
+            override fun onCreateFailure(error: String?) { Log.e("WebRTC", "Set remote desc failed: $error") }
+            override fun onSetFailure(error: String?) { Log.e("WebRTC", "Set remote desc failed: $error") }
         }, sdp)
     }
 
@@ -222,6 +230,7 @@ class WebRtcManager(private val context: Context, private val webRtcListener: We
         localAudioSource?.dispose()
         peerConnection?.close()
         factory?.dispose()
+        eglBase.release()
         
         // Restore audio state
         audioManager?.mode = savedAudioMode

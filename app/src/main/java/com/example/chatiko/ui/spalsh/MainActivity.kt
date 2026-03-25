@@ -65,63 +65,68 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ChatikoTheme {
-                val navController = rememberNavController()
-
-                NavHost(
-                    navController = navController,
-                    startDestination = "splash"
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
                 ) {
-                    composable("splash") {
-                        SplashScreen(navController)
-                    }
+                    val navController = rememberNavController()
 
-                    composable("home") {
-                        HomeScreen(navController)
-                    }
+                    NavHost(
+                        navController = navController,
+                        startDestination = "splash"
+                    ) {
+                        composable("splash") {
+                            SplashScreen(navController)
+                        }
 
-                    composable("login") {
-                        LoginScreen(navController)
-                    }
+                        composable("home") {
+                            HomeScreen(navController)
+                        }
 
-                    composable("registration") {
-                        RegistrationScreen(navController)
-                    }
+                        composable("login") {
+                            LoginScreen(navController)
+                        }
 
-                    composable("loginV1") {
-                        LoginScreenV1(navController)
-                    }
+                        composable("registration") {
+                            RegistrationScreen(navController)
+                        }
 
-                    composable("preference") {
-                        PreferenceScreen(navController)
-                    }
-                    composable(
-                        route = "chatscreen/{userId}/{otherUserId}/{username}",
-                        arguments = listOf(
-                            navArgument("userId") { type = NavType.StringType },
-                            navArgument("otherUserId") { type = NavType.StringType },
-                            navArgument("username") { type = NavType.StringType }
-                        )
-                    ) { backStackEntry ->
-                        val userId = backStackEntry.arguments?.getString("userId")
-                        val otherId = backStackEntry.arguments?.getString("otherUserId")
-                        val username = backStackEntry.arguments?.getString("username")
+                        composable("loginV1") {
+                            LoginScreenV1(navController)
+                        }
 
-                        ChatScreen(navController, userId, otherId, username)
-                    }
+                        composable("preference") {
+                            PreferenceScreen(navController)
+                        }
+                        composable(
+                            route = "chatscreen/{userId}/{otherUserId}/{username}",
+                            arguments = listOf(
+                                navArgument("userId") { type = NavType.StringType },
+                                navArgument("otherUserId") { type = NavType.StringType },
+                                navArgument("username") { type = NavType.StringType }
+                            )
+                        ) { backStackEntry ->
+                            val userId = backStackEntry.arguments?.getString("userId")
+                            val otherId = backStackEntry.arguments?.getString("otherUserId")
+                            val username = backStackEntry.arguments?.getString("username")
 
-                    composable(
-                        "nearby_vibes/{selectedMood}",
-                        arguments = listOf(navArgument("selectedMood") { type = NavType.StringType })
-                    ) { backStackEntry ->
-                        val selectedMood = backStackEntry.arguments?.getString("selectedMood")
-                        val context = LocalContext.current
-                        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                            ChatScreen(navController, userId, otherId, username)
+                        }
 
-                        NearbyVibesScreen(navController, null, sharedPref.getString("userId", null), initialMood = selectedMood)
-                    }
+                        composable(
+                            "nearby_vibes/{selectedMood}",
+                            arguments = listOf(navArgument("selectedMood") { type = NavType.StringType })
+                        ) { backStackEntry ->
+                            val selectedMood = backStackEntry.arguments?.getString("selectedMood")
+                            val context = LocalContext.current
+                            val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
 
-                    composable("settings") {
-                        SettingsScreen(navController)
+                            NearbyVibesScreen(navController, null, sharedPref.getString("userId", null), initialMood = selectedMood)
+                        }
+
+                        composable("settings") {
+                            SettingsScreen(navController)
+                        }
                     }
                 }
             }

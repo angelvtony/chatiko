@@ -46,7 +46,6 @@ fun WebRtcCallScreen(
                 factory = { ctx ->
                     SurfaceViewRenderer(ctx).apply {
                         viewModel.webRtcManager?.initRemoteSurfaceView(this)
-                        // Note: Track binding happens when track is received
                     }
                 },
                 update = { view ->
@@ -66,21 +65,15 @@ fun WebRtcCallScreen(
                     factory = { ctx ->
                         SurfaceViewRenderer(ctx).apply {
                             viewModel.webRtcManager?.initLocalSurfaceView(this)
-                            viewModel.webRtcManager?.startLocalVideo(this, true)
                         }
+                    },
+                    update = { view ->
+                        viewModel.webRtcManager?.startLocalVideo(view)
                     },
                     modifier = Modifier
                         .size(120.dp, 160.dp)
                         .background(Color.Gray)
                 )
-            }
-        } else {
-            // Audio-only mode: Start audio but don't show SurfaceView
-            LaunchedEffect(Unit) {
-                // Initialize local streams internally if possible,
-                // but we might need dummy view or just context.
-                // Our manager starts video only if `isVideoCall` is true.
-                viewModel.webRtcManager?.startLocalVideo(SurfaceViewRenderer(context), false)
             }
         }
 
