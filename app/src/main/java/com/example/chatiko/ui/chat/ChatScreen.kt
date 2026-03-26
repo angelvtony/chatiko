@@ -1,17 +1,31 @@
 package com.example.chatiko.ui.chat
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.view.HapticFeedbackConstants
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,18 +35,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,27 +57,40 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.chatiko.network.MessageDto
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModel
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModelFactory
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import kotlin.math.roundToInt
 
 
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun ChatScreen(
     navController: NavController?,
@@ -78,56 +106,291 @@ fun ChatScreen(
     val messages = viewModel.messages
     val replyingTo by viewModel.replyingTo
 
-    Scaffold(
-        topBar = { ChatTopBar(username) },
-        bottomBar = {
-            MessageInputBar(
-                replyingTo = replyingTo,
-                onCancelReply = { viewModel.clearReply() },
-                onSend = { text -> viewModel.sendMessage(text) }
-            )
+    val incomingCallType by viewModel.incomingCallType
+    val outgoingCallType by viewModel.outgoingCallType
+    val callAccepted by viewModel.callAccepted
+    val callDeclined by viewModel.callDeclined
+
+    val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val token = sharedPref.getString("jwt_token", null)
+
+    val sharedRoomId = if (userId != null && otherUserId != null) {
+        if (userId < otherUserId) "${userId}_$otherUserId" else "${otherUserId}_$userId"
+    } else {
+        "chatiko_random_room"
+    }
+
+    val activeCallType by viewModel.activeCallType
+
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.values.all { it }
+        if (!granted) {
+            Toast.makeText(context, "Camera & Mic permissions are required for calling", Toast.LENGTH_SHORT).show()
         }
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    PaddingValues(
-                        start = 12.dp,
-                        end = 12.dp,
-                        top = paddingValues.calculateTopPadding(),
-                        bottom = paddingValues.calculateBottomPadding()
-                    )
-                ),
-            reverseLayout = true,
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            items(
-                items = messages.reversed(),
-                key = { it.id }
-            ) { message ->
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn() + expandVertically()
-                ) {
-                    MessageBubble(
-                        message = message,
-                        onDelete = { viewModel.deleteMessage(message.id) },
-                        onReact = { reaction ->
-                            viewModel.reactToMessage(message.id, reaction = reaction)
-                        },
-                        onReply = { viewModel.setReply(message) }
-                    )
-                }
+    }
+
+    // Initialize WebRTC and request permissions
+    LaunchedEffect(Unit) {
+        viewModel.initWebRtc(context)
+        permissionsLauncher.launch(
+            arrayOf(
+                Manifest.permission.CAMERA,
+                Manifest.permission.RECORD_AUDIO
+            )
+        )
+        viewModel.markMessagesAsRead()
+    }
+    DisposableEffect(Unit) {
+        viewModel.isChatOpen = true
+
+        onDispose {
+            viewModel.isChatOpen = false
+        }
+    }
+
+    if (activeCallType != null) {
+        WebRtcCallScreen(
+            viewModel = viewModel,
+            callType = activeCallType!!,
+            onEndCall = { viewModel.endCall() }
+        )
+    } else {
+        // Only show Chat Screen if no active call
+
+        Scaffold(
+            topBar = { ChatTopBar(username, viewModel) },
+            bottomBar = {
+                MessageInputBar(
+                    replyingTo = replyingTo,
+                    onCancelReply = { viewModel.clearReply() },
+                    onSend = { text -> viewModel.sendMessage(text) }
+                )
             }
+        ) { paddingValues ->
+            val reversedMessages = messages.reversed()
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        PaddingValues(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding()
+                        )
+                    ),
+                reverseLayout = true,
+                contentPadding = PaddingValues(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                itemsIndexed(
+                    items = reversedMessages,
+                    key = { _, msg -> msg.id }
+                ) { index, message ->
+                    val currentMsgDate = getDateString(message.createdAt)
+                    val nextMsgDate = reversedMessages.getOrNull(index + 1)?.let { getDateString(it.createdAt) }
+
+                    Column {
+                        if (currentMsgDate != nextMsgDate) {
+                            DateHeader(currentMsgDate)
+                        }
+
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + expandVertically()
+                        ) {
+                            SwipeToReplyWrapper(
+                                onReply = { viewModel.setReply(message) }
+                            ) {
+                                MessageBubble(
+                                    message = message,
+                                    onDelete = { viewModel.deleteMessage(message.id) },
+                                    onReact = { reaction ->
+                                        viewModel.reactToMessage(message.id, reaction = reaction)
+                                    },
+                                    onReply = { viewModel.setReply(message) }
+                                )
+                            }
+                        } // End AnimatedVisibility
+                    } // End Column
+                } // End itemsIndexed
+            } // End LazyColumn
+        } // End Scaffold
+    } // End else branch
+
+    // Show Dialogs
+    if (incomingCallType != null) {
+        IncomingCallDialog(
+            callerName = username ?: "Unknown",
+            callType = incomingCallType!!,
+            onAccept = {
+                val type = incomingCallType ?: "video"
+                val isVideo = type == "video"
+                viewModel.acceptWebRtcCall(isVideo)
+                viewModel.sendCallSignaling("CALL_ACCEPTED", type)
+                viewModel.resetCallStates()
+            },
+            onDecline = {
+                viewModel.sendCallSignaling("CALL_DECLINED")
+                viewModel.resetCallStates()
+            }
+        )
+    }
+
+    if (outgoingCallType != null) {
+        OutgoingCallDialog(
+            receiverName = username ?: "Unknown",
+            callType = outgoingCallType!!,
+            onCancel = {
+                viewModel.sendCallSignaling("CALL_DECLINED")
+                viewModel.resetCallStates()
+            }
+        )
+    }
+}
+
+fun getDateString(createdAt: String?): String {
+    if (createdAt.isNullOrEmpty()) return "Today"
+
+    return try {
+        val timeInMillis = try {
+            // Try millis first
+            createdAt.toLong()
+        } catch (e: Exception) {
+            // Fallback: parse ISO date
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+            sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            sdf.parse(createdAt)?.time ?: System.currentTimeMillis()
+        }
+
+        val date = Date(timeInMillis)
+        val format = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val today = cal.timeInMillis
+        val yesterday = today - 86400000L
+
+        when {
+            timeInMillis >= today -> "Today"
+            timeInMillis >= yesterday -> "Yesterday"
+            else -> format.format(date)
+        }
+
+    } catch (e: Exception) {
+        "Unknown Date"
+    }
+}
+
+@Composable
+fun DateHeader(dateStr: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            color = if (isSystemInDarkTheme()) Color(0xFF2A3942) else Color(0xFFF1F3FD),
+            shape = RoundedCornerShape(8.dp),
+            shadowElevation = 1.dp
+        ) {
+            Text(
+                text = dateStr,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f)
+            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatTopBar(username: String?) {
+fun SwipeToReplyWrapper(
+    onReply: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    var offsetX by remember { mutableStateOf(0f) }
+    val animatedOffsetX by animateFloatAsState(
+        targetValue = offsetX,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = ""
+    )
+
+    val replyThreshold = 150f
+    var triggered by remember { mutableStateOf(false) }
+    val view = LocalView.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        offsetX = 0f
+                        triggered = false
+                    },
+                    onDragCancel = {
+                        offsetX = 0f
+                        triggered = false
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        if (dragAmount > 0 || offsetX > 0) {
+                            val newOffset = (offsetX + dragAmount).coerceIn(0f, 250f)
+                            offsetX = newOffset
+
+                            if (offsetX > replyThreshold && !triggered) {
+                                triggered = true
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                onReply()
+                            }
+                        }
+                    }
+                )
+            }
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = 16.dp)
+        ) {
+            val progress = (animatedOffsetX / replyThreshold).coerceIn(0f, 1f)
+            if (progress > 0.1f) {
+                Surface(
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .scale(progress.coerceAtLeast(0.5f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Reply,
+                        contentDescription = "Reply",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier.offset { IntOffset(animatedOffsetX.roundToInt(), 0) }
+        ) {
+            content()
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun ChatTopBar(username: String?, viewModel: ChatViewModel) {
     TopAppBar(
         modifier = Modifier.shadow(elevation = 8.dp),
         title = {
@@ -150,17 +413,23 @@ fun ChatTopBar(username: String?) {
             }
         },
         actions = {
-            IconButton(onClick = { }) {
+            IconButton(onClick = {
+                viewModel.sendCallSignaling("CALL_REQUEST", "video")
+                viewModel.startWebRtcCall(true)
+            }) {
                 Icon(Icons.Filled.Videocam, contentDescription = "Video Call")
             }
-            IconButton(onClick = { }) {
+            IconButton(onClick = {
+                viewModel.sendCallSignaling("CALL_REQUEST", "audio")
+                viewModel.startWebRtcCall(false)
+            }) {
                 Icon(Icons.Filled.Call, contentDescription = "Call")
             }
         }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun MessageBubble(
     message: MessageDto,
@@ -173,20 +442,24 @@ fun MessageBubble(
     var showReactions by remember { mutableStateOf(false) }
     var showEmojiSheet by remember { mutableStateOf(false) }
 
-    val bubbleColor =
-        if (message.isMe) MaterialTheme.colorScheme.primary else Color.White
+    val isDark = isSystemInDarkTheme()
 
-    val textColor =
-        if (message.isMe) Color.White else Color.Black
+    val bubbleColor = if (message.isMe) {
+        if (isDark) Color(0xFF005C4B) else Color(0xFFDCF8C6)
+    } else {
+        if (isDark) Color(0xFF202C33) else Color.White
+    }
+
+    val textColor = if (isDark) Color.White else Color.Black
 
     val alignment =
         if (message.isMe) Alignment.CenterEnd else Alignment.CenterStart
 
     val bubbleShape =
         if (message.isMe)
-            RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
+            RoundedCornerShape(topStart = 12.dp, topEnd = 0.dp, bottomStart = 12.dp, bottomEnd = 12.dp)
         else
-            RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
+            RoundedCornerShape(topStart = 0.dp, topEnd = 12.dp, bottomStart = 12.dp, bottomEnd = 12.dp)
 
     Box(
         modifier = Modifier
@@ -205,18 +478,38 @@ fun MessageBubble(
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
 
-            message.replyTo?.let {
+            message.replyTo?.let { repliedMsg ->
+                val repliedName = if (repliedMsg.isMe) "You" else "Friend"
                 Surface(
-                    color = Color(0x11000000),
+                    color = if (isDark) Color(0x33000000) else Color(0x11000000),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    modifier = Modifier
+                        .padding(bottom = 4.dp)
+                        .fillMaxWidth(0.9f)
                 ) {
-                    Text(
-                        text = it.message ?: "",
-                        modifier = Modifier.padding(6.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1
-                    )
+                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(4.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(
+                                text = repliedName,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = repliedMsg.message ?: "",
+                                color = textColor.copy(alpha = 0.8f),
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
 
@@ -225,24 +518,76 @@ fun MessageBubble(
                 Surface(
                     color = bubbleColor,
                     shape = bubbleShape,
-                    tonalElevation = 2.dp,
-                    shadowElevation = 2.dp
+                    tonalElevation = 1.dp,
+                    shadowElevation = 1.dp
                 ) {
-                    Text(
-                        text = message.message ?: "",
-                        modifier = Modifier.padding(12.dp),
-                        color = textColor
-                    )
+                    Column(
+                        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 4.dp)
+                    ) {
+                        Text(
+                            text = message.message ?: "",
+                            color = textColor,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(top = 2.dp)
+                        ) {
+                            val timeText = try {
+                                val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                                sdf.format(java.util.Date(message.createdAt?.toLong() ?: System.currentTimeMillis()))
+                            } catch (e: Exception) {
+                                "12:00"
+                            }
+
+                            Text(
+                                text = timeText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray,
+                                fontSize = 10.sp
+                            )
+                            if (message.isMe) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                val tickColor = when (message.status) {
+                                    "read" -> Color(0xFF34B7F1)       // blue
+                                    "delivered" -> Color.Gray         // double grey
+                                    else -> Color.Gray                // single grey
+                                }
+
+                                val tickIcon = when (message.status) {
+                                    "sent" -> Icons.Default.Done      // single tick
+                                    else -> Icons.Default.DoneAll     // double tick
+                                }
+
+                                Icon(
+                                    imageVector = tickIcon,
+                                    contentDescription = "Status",
+                                    tint = tickColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 message.reaction?.takeIf { it.isNotEmpty() && it != "null" }?.let { reaction ->
-                    Text(
-                        text = reaction,
-                        style = MaterialTheme.typography.titleMedium,
+                    Surface(
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = if (isDark) Color(0xFF2A3942) else Color.White,
+                        shadowElevation = 2.dp,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .offset(x = 6.dp, y = 6.dp)
-                    )
+                            .offset(x = 4.dp, y = 8.dp)
+                    ) {
+                        Text(
+                            text = reaction,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
         }
@@ -256,7 +601,7 @@ fun MessageBubble(
             Row(
                 modifier = Modifier
                     .offset(y = (-45).dp)
-                    .background(Color.White, RoundedCornerShape(30.dp))
+                    .background(if (isSystemInDarkTheme()) Color(0xFF2A3942) else Color.White, RoundedCornerShape(30.dp))
                     .shadow(8.dp, RoundedCornerShape(30.dp))
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -347,20 +692,48 @@ fun MessageInputBar(
     ) {
         Column {
 
-            replyingTo?.let {
-                Row(
+            replyingTo?.let { repliedMsg ->
+                val repliedName = if (repliedMsg.isMe) "You" else "Friend"
+                Surface(
+                    color = if (isSystemInDarkTheme()) Color(0xFF1E2930) else Color(0xFFF0F2F5),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(
-                        text = "Replying to: ${it.message}",
-                        maxLines = 1
-                    )
-                    TextButton(onClick = onCancelReply) {
-                        Text("Cancel")
+                    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(4.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = repliedName,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = repliedMsg.message ?: "",
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (isSystemInDarkTheme()) Color.LightGray else Color.DarkGray
+                                )
+                            }
+                            IconButton(onClick = onCancelReply) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel Reply")
+                            }
+                        }
                     }
                 }
             }
@@ -378,7 +751,13 @@ fun MessageInputBar(
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Type a message...") },
                     shape = RoundedCornerShape(50),
-                    maxLines = 4
+                    maxLines = 4,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = if (isSystemInDarkTheme()) Color(0xFF2A3942) else Color.White,
+                        unfocusedContainerColor = if (isSystemInDarkTheme()) Color(0xFF2A3942) else Color.White,
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent
+                    )
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))

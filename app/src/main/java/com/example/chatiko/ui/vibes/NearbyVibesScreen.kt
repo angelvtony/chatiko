@@ -128,7 +128,7 @@ fun NearbyVibesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFFF8F9FA)),
+                .background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -171,7 +171,7 @@ fun NearbyVibesTopBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .statusBarsPadding()
             .padding(top = 16.dp, bottom = 8.dp)
     ) {
@@ -272,7 +272,7 @@ fun UserVibeCard(user: NearbyVibeUser, myLat: Double, myLng: Double, onClick: ()
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -323,7 +323,7 @@ fun UserVibeCard(user: NearbyVibeUser, myLat: Double, myLng: Double, onClick: ()
                         text = user.username,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(text = user.moodEmoji, fontSize = 16.sp)
@@ -368,7 +368,7 @@ fun FilterChip(
 ) {
 
     val bgColor by animateColorAsState(
-        if (isSelected) Color(0xFF6A82FB) else Color(0xFFF1F3FD),
+        if (isSelected) Color(0xFF6A82FB) else MaterialTheme.colorScheme.surfaceVariant,
         label = ""
     )
 
@@ -412,7 +412,7 @@ fun NearbyRadar(
         modifier = Modifier
             .fillMaxWidth()
             .height(240.dp)
-            .background(Color.White, RoundedCornerShape(20.dp)),
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp)),
         contentAlignment = Alignment.Center
     ) {
 

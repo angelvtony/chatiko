@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.chatiko"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
     implementation(libs.ads.mobile.sdk)
+    implementation(libs.androidx.compose.foundation)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -93,5 +94,5 @@ dependencies {
 
 // Add this if you're using Jetpack Compose 1.3.0+
 
-
+    implementation("io.getstream:stream-webrtc-android:1.1.1")
 }

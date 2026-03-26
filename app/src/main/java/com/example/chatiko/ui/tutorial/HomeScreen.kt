@@ -73,7 +73,7 @@ fun HomeScreen(navController: NavController?) {
 
     // Column to hold HorizontalPager and dots indicator
     Column(
-        modifier = Modifier.fillMaxSize().background(Color.White),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -169,7 +169,7 @@ fun PagerContent(screen: ScreenContent, pagerState: PagerState, pageIndex: Int) 
                 text = screen.text,
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black
+                    color = MaterialTheme.colorScheme.onBackground
                 ),
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
@@ -183,7 +183,7 @@ fun PagerContent(screen: ScreenContent, pagerState: PagerState, pageIndex: Int) 
             Text(
                 text = screen.subText,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.Black.copy(alpha = 0.50f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.60f),
                 modifier = Modifier.align(Alignment.CenterHorizontally),
                 textAlign = TextAlign.Center
             )
