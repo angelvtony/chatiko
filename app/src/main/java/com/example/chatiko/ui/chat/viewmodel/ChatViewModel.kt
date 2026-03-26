@@ -1,11 +1,9 @@
 package com.example.chatiko.ui.chat.viewmodel
 
-import android.R.attr.text
 import android.content.Context
 import android.util.Base64
 import android.util.Log
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -16,6 +14,7 @@ import com.example.chatiko.network.MessageDto
 import com.example.chatiko.network.PublicKeyRequest
 import com.example.chatiko.network.RetrofitClient
 import com.example.chatiko.network.SocketManager
+import com.example.chatiko.ui.chat.WebRtcManager
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.launch
@@ -23,8 +22,6 @@ import org.json.JSONObject
 import org.webrtc.IceCandidate
 import org.webrtc.SessionDescription
 import org.webrtc.VideoTrack
-import com.example.chatiko.ui.chat.WebRtcManager
-import java.net.URL
 import java.security.KeyFactory
 import java.security.PublicKey
 import java.security.spec.X509EncodedKeySpec
@@ -63,11 +60,12 @@ class ChatViewModel(
 
     var webRtcManager: WebRtcManager? = null
     private var socket: Socket? = SocketManager.getSocket()
-    
+
     private var pendingOffer: String? = null
     private val pendingIceCandidates = mutableListOf<IceCandidate>()
     private var isRemoteReady = false
     private var cachedReceiverPublicKey: PublicKey? = null
+    var isChatOpen = true
 
     // --- Initialization ---
     init {
@@ -84,7 +82,7 @@ class ChatViewModel(
                 forceNew = true
                 reconnection = true
             }
-            socket = IO.socket("http://10.63.1.4:3000", opts)
+            socket = IO.socket("http://10.63.0.148:3000", opts)
             socket?.connect()
             socket?.on(Socket.EVENT_CONNECT) { socket?.emit("join", userId) }
 
@@ -94,6 +92,7 @@ class ChatViewModel(
                 val serverMessageId = msgJson.getString("_id")
 
                 if (senderIdFromMsg == userId) {
+                    markMessagesAsRead()
                     val index = _messages.indexOfFirst { it.id.startsWith("temp-") }
                     if (index != -1) _messages[index] = _messages[index].copy(id = serverMessageId)
                     return@on
@@ -115,20 +114,57 @@ class ChatViewModel(
                 }
             }
 
+            socket?.on("messageStatus") { args ->
+                val data = args[0] as JSONObject
+                val messageId = data.getString("messageId")
+                val status = data.getString("status")
+
+                viewModelScope.launch {
+                    val index = _messages.indexOfFirst { it.id == messageId }
+                    if (index != -1) {
+                        _messages[index] = _messages[index].copy(status = status)
+                    }
+                }
+            }
+
+            socket?.on("messagesRead") { args ->
+                val data = args[0] as JSONObject
+                val idsArray = data.getJSONArray("messageIds")
+
+                val ids = mutableListOf<String>()
+                for (i in 0 until idsArray.length()) {
+                    ids.add(idsArray.getString(i))
+                }
+
+                viewModelScope.launch {
+                    _messages.replaceAll { msg ->
+                        if (ids.contains(msg.id)) {
+                            msg.copy(status = "read")
+                        } else msg
+                    }
+                }
+            }
+
             // Sync interactions from remote devices
-            socket?.on("reactMessage") { args ->
+            socket?.on("messageReaction") { args ->
                 try {
                     val msgJson = args[0] as JSONObject
-                    val messageId = msgJson.getString("messageId")
-                    val reaction = msgJson.getString("reaction")
+
+                    val messageId = msgJson.getString("_id")
+                    val reaction = msgJson.optString("reaction", null)
+
                     viewModelScope.launch {
                         val index = _messages.indexOfFirst { it.id == messageId }
                         if (index != -1) {
                             _messages[index] = _messages[index].copy(reaction = reaction)
                         }
                     }
-                } catch (e: Exception) { e.printStackTrace() }
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
+
             socket?.on("deleteMessage") { args ->
                 try {
                     val msgJson = args[0] as JSONObject
@@ -136,10 +172,14 @@ class ChatViewModel(
                     viewModelScope.launch {
                         _messages.removeAll { it.id == messageId }
                     }
-                } catch (e: Exception) { e.printStackTrace() }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
 
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun handleIncomingMessage(messageText: String, msgJson: JSONObject, serverMessageId: String, senderId: String) {
@@ -151,6 +191,7 @@ class ChatViewModel(
                 _outgoingCallType.value = null
                 endCall()
             }
+
             messageText.startsWith("WEBRTC_") -> handleWebRtcMessage(messageText)
             else -> {
                 val replyToObj = msgJson.optJSONObject("replyTo")
@@ -179,6 +220,9 @@ class ChatViewModel(
                         createdAt = msgJson.optString("createdAt", "")
                     )
                 )
+                if (senderId == otherUserId && isChatOpen) {
+                    markMessagesAsRead()
+                }
             }
         }
     }
@@ -200,6 +244,7 @@ class ChatViewModel(
                     pendingOffer = sdp
                 }
             }
+
             message.startsWith("WEBRTC_ANSWER:") -> {
                 val sdp = message.removePrefix("WEBRTC_ANSWER:")
                 webRtcManager?.setRemoteDescription(SessionDescription(SessionDescription.Type.ANSWER, sdp)) {
@@ -210,6 +255,7 @@ class ChatViewModel(
                     }
                 }
             }
+
             message.startsWith("WEBRTC_ICE:") -> {
                 val parts = message.removePrefix("WEBRTC_ICE:").split("|")
                 if (parts.size == 3) {
@@ -221,6 +267,7 @@ class ChatViewModel(
                     }
                 }
             }
+
             message.startsWith("WEBRTC_END:") -> endCall()
         }
     }
@@ -234,7 +281,9 @@ class ChatViewModel(
                 val authHeader = "Bearer $jwtToken"
                 val key = CryptoManager.getPublicKeyString()
                 RetrofitClient.instance.uploadPublicKey(PublicKeyRequest(key), authHeader)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -245,18 +294,32 @@ class ChatViewModel(
                 val sharedPref = context?.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
                 val jwtToken = sharedPref?.getString("jwt_token", null)
                 val authHeader = "Bearer $jwtToken"
+
                 val response = RetrofitClient.instance.getMessages(otherUserId, authHeader)
-                _messages.addAll(response.map {
 
-                    val decrypted = decryptMessage(it.message ?: "")
+                _messages.clear()
 
-                    if (decrypted.startsWith("CALL_REQUEST:") ||
-                        decrypted.startsWith("CALL_ACCEPTED:") ||
-                        decrypted.startsWith("CALL_DECLINED:") ||
-                        decrypted.startsWith("WEBRTC_")
-                    ) {
-                        return@map null
+                _messages.addAll(response.mapNotNull {
+
+                    val decrypted = try {
+                        val payloadObj = JSONObject(it.message ?: "")
+
+                        val payload = CryptoManager.EncryptedPayload(
+                            encryptedKey = payloadObj.getString("encryptedKey"),
+                            encryptedMessage = payloadObj.getString("encryptedMessage"),
+                            iv = payloadObj.getString("iv")
+                        )
+
+                        CryptoManager.decryptMessageHybrid(payload)
+
+                    } catch (e: Exception) {
+                        null
                     }
+
+                    if (decrypted == null ||
+                        decrypted.startsWith("CALL_") ||
+                        decrypted.startsWith("WEBRTC_")
+                    ) return@mapNotNull null
 
                     MessageDto(
                         id = it.id,
@@ -266,9 +329,10 @@ class ChatViewModel(
                         isMe = it.senderId == userId,
                         reaction = it.reaction,
                         replyTo = it.replyTo,
-                        createdAt = it.createdAt
+                        createdAt = it.createdAt ?: System.currentTimeMillis().toString()
                     )
-                }.filterNotNull())
+                })
+
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -357,12 +421,15 @@ class ChatViewModel(
                 override fun onIceCandidate(candidate: IceCandidate) {
                     sendWebRtcSignaling("WEBRTC_ICE:${candidate.sdpMid}|${candidate.sdpMLineIndex}|${candidate.sdp}")
                 }
+
                 override fun onOfferReady(sessionDescription: SessionDescription) {
                     sendWebRtcSignaling("WEBRTC_OFFER:${sessionDescription.description}")
                 }
+
                 override fun onAnswerReady(sessionDescription: SessionDescription) {
                     sendWebRtcSignaling("WEBRTC_ANSWER:${sessionDescription.description}")
                 }
+
                 override fun onRemoteTrackAdded(track: VideoTrack) {
                     remoteVideoTrack.value = track
                 }
@@ -398,7 +465,7 @@ class ChatViewModel(
         _activeCallType.value = if (isVideo) "video" else "audio"
         webRtcManager?.prepareMedia(isVideo)
         webRtcManager?.createPeerConnection(isVideo)
-        
+
         pendingOffer?.let { offer ->
             webRtcManager?.setRemoteDescription(SessionDescription(SessionDescription.Type.OFFER, offer)) {
                 viewModelScope.launch {
@@ -426,7 +493,9 @@ class ChatViewModel(
     }
 
     // --- Utilities ---
-    fun setReply(message: MessageDto) { _replyingTo.value = message }
+    fun setReply(message: MessageDto) {
+        _replyingTo.value = message
+    }
 
     fun resetCallStates() {
         _incomingCallType.value = null
@@ -478,7 +547,24 @@ class ChatViewModel(
         socket?.emit("deleteMessage", JSONObject(data))
     }
 
-    fun clearReply() { _replyingTo.value = null }
+    fun markMessagesAsRead() {
+        var lastReadTime = 0L
+        val now = System.currentTimeMillis()
+
+        // avoid spamming (only once per 1 sec)
+        if (now - lastReadTime < 1000) return
+        lastReadTime = now
+
+        val json = JSONObject().apply {
+            put("senderId", otherUserId)
+            put("receiverId", userId)
+        }
+        socket?.emit("markAsRead", json)
+    }
+
+    fun clearReply() {
+        _replyingTo.value = null
+    }
 
     override fun onCleared() {
         super.onCleared()

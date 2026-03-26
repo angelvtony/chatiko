@@ -88,7 +88,8 @@ data class MessageDto(
     val reaction: String?,
     val createdAt: String?,
     val replyTo: MessageDto? = null,
-    val isMe: Boolean
+    val isMe: Boolean,
+    val status: String? = "sent"
 )
 
 

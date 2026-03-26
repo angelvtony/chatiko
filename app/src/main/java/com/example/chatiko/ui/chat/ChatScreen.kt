@@ -3,27 +3,30 @@ package com.example.chatiko.ui.chat
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.view.HapticFeedbackConstants
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -33,18 +36,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Reply
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -56,40 +57,37 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
-import androidx.compose.ui.draw.scale
-import android.view.HapticFeedbackConstants
-import androidx.compose.ui.Modifier
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import kotlin.math.roundToInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.chatiko.network.MessageDto
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModel
 import com.example.chatiko.ui.chat.viewmodel.ChatViewModelFactory
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import kotlin.math.roundToInt
 
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -142,6 +140,14 @@ fun ChatScreen(
                 Manifest.permission.RECORD_AUDIO
             )
         )
+        viewModel.markMessagesAsRead()
+    }
+    DisposableEffect(Unit) {
+        viewModel.isChatOpen = true
+
+        onDispose {
+            viewModel.isChatOpen = false
+        }
     }
 
     if (activeCallType != null) {
@@ -153,66 +159,66 @@ fun ChatScreen(
     } else {
         // Only show Chat Screen if no active call
 
-    Scaffold(
-        topBar = { ChatTopBar(username, viewModel) },
-        bottomBar = {
-            MessageInputBar(
-                replyingTo = replyingTo,
-                onCancelReply = { viewModel.clearReply() },
-                onSend = { text -> viewModel.sendMessage(text) }
-            )
-        }
-    ) { paddingValues ->
-        val reversedMessages = messages.reversed()
+        Scaffold(
+            topBar = { ChatTopBar(username, viewModel) },
+            bottomBar = {
+                MessageInputBar(
+                    replyingTo = replyingTo,
+                    onCancelReply = { viewModel.clearReply() },
+                    onSend = { text -> viewModel.sendMessage(text) }
+                )
+            }
+        ) { paddingValues ->
+            val reversedMessages = messages.reversed()
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    PaddingValues(
-                        start = 12.dp,
-                        end = 12.dp,
-                        top = paddingValues.calculateTopPadding(),
-                        bottom = paddingValues.calculateBottomPadding()
-                    )
-                ),
-            reverseLayout = true,
-            contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            itemsIndexed(
-                items = reversedMessages,
-                key = { _, msg -> msg.id }
-            ) { index, message ->
-                val currentMsgDate = getDateString(message.createdAt)
-                val nextMsgDate = reversedMessages.getOrNull(index + 1)?.let { getDateString(it.createdAt) }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        PaddingValues(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding()
+                        )
+                    ),
+                reverseLayout = true,
+                contentPadding = PaddingValues(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                itemsIndexed(
+                    items = reversedMessages,
+                    key = { _, msg -> msg.id }
+                ) { index, message ->
+                    val currentMsgDate = getDateString(message.createdAt)
+                    val nextMsgDate = reversedMessages.getOrNull(index + 1)?.let { getDateString(it.createdAt) }
 
-                Column {
-                    if (currentMsgDate != nextMsgDate) {
-                        DateHeader(currentMsgDate)
-                    }
-
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn() + expandVertically()
-                    ) {
-                        SwipeToReplyWrapper(
-                            onReply = { viewModel.setReply(message) }
-                        ) {
-                            MessageBubble(
-                                message = message,
-                                onDelete = { viewModel.deleteMessage(message.id) },
-                                onReact = { reaction ->
-                                    viewModel.reactToMessage(message.id, reaction = reaction)
-                                },
-                                onReply = { viewModel.setReply(message) }
-                            )
+                    Column {
+                        if (currentMsgDate != nextMsgDate) {
+                            DateHeader(currentMsgDate)
                         }
-                    } // End AnimatedVisibility
-                } // End Column
-            } // End itemsIndexed
-        } // End LazyColumn
-    } // End Scaffold
+
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + expandVertically()
+                        ) {
+                            SwipeToReplyWrapper(
+                                onReply = { viewModel.setReply(message) }
+                            ) {
+                                MessageBubble(
+                                    message = message,
+                                    onDelete = { viewModel.deleteMessage(message.id) },
+                                    onReact = { reaction ->
+                                        viewModel.reactToMessage(message.id, reaction = reaction)
+                                    },
+                                    onReply = { viewModel.setReply(message) }
+                                )
+                            }
+                        } // End AnimatedVisibility
+                    } // End Column
+                } // End itemsIndexed
+            } // End LazyColumn
+        } // End Scaffold
     } // End else branch
 
     // Show Dialogs
@@ -248,16 +254,28 @@ fun ChatScreen(
 
 fun getDateString(createdAt: String?): String {
     if (createdAt.isNullOrEmpty()) return "Today"
+
     return try {
-        val timeInMillis = createdAt.toLong()
+        val timeInMillis = try {
+            // Try millis first
+            createdAt.toLong()
+        } catch (e: Exception) {
+            // Fallback: parse ISO date
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+            sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            sdf.parse(createdAt)?.time ?: System.currentTimeMillis()
+        }
+
         val date = Date(timeInMillis)
         val format = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.HOUR_OF_DAY, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
         val today = cal.timeInMillis
         val yesterday = today - 86400000L
 
@@ -266,7 +284,8 @@ fun getDateString(createdAt: String?): String {
             timeInMillis >= yesterday -> "Yesterday"
             else -> format.format(date)
         }
-    } catch(e: Exception) {
+
+    } catch (e: Exception) {
         "Unknown Date"
     }
 }
@@ -274,7 +293,9 @@ fun getDateString(createdAt: String?): String {
 @Composable
 fun DateHeader(dateStr: String) {
     Box(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
@@ -345,7 +366,9 @@ fun SwipeToReplyWrapper(
                 Surface(
                     shape = androidx.compose.foundation.shape.CircleShape,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                    modifier = Modifier.size(32.dp).scale(progress.coerceAtLeast(0.5f))
+                    modifier = Modifier
+                        .size(32.dp)
+                        .scale(progress.coerceAtLeast(0.5f))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Reply,
@@ -460,30 +483,32 @@ fun MessageBubble(
                 Surface(
                     color = if (isDark) Color(0x33000000) else Color(0x11000000),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.padding(bottom = 4.dp).fillMaxWidth(0.9f)
+                    modifier = Modifier
+                        .padding(bottom = 4.dp)
+                        .fillMaxWidth(0.9f)
                 ) {
                     Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-                         Box(
-                             modifier = Modifier
-                                 .fillMaxHeight()
-                                 .width(4.dp)
-                                 .background(MaterialTheme.colorScheme.primary)
-                         )
-                         Column(modifier = Modifier.padding(8.dp)) {
-                             Text(
-                                 text = repliedName, 
-                                 color = MaterialTheme.colorScheme.primary, 
-                                 fontWeight = FontWeight.Bold, 
-                                 fontSize = 12.sp
-                             )
-                             Text(
-                                 text = repliedMsg.message ?: "",
-                                 color = textColor.copy(alpha = 0.8f),
-                                 fontSize = 12.sp,
-                                 maxLines = 1,
-                                 overflow = TextOverflow.Ellipsis
-                             )
-                         }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(4.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(
+                                text = repliedName,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = repliedMsg.message ?: "",
+                                color = textColor.copy(alpha = 0.8f),
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -507,7 +532,9 @@ fun MessageBubble(
                         Row(
                             horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.align(Alignment.End).padding(top = 2.dp)
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(top = 2.dp)
                         ) {
                             val timeText = try {
                                 val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
@@ -524,10 +551,21 @@ fun MessageBubble(
                             )
                             if (message.isMe) {
                                 Spacer(modifier = Modifier.width(4.dp))
+                                val tickColor = when (message.status) {
+                                    "read" -> Color(0xFF34B7F1)       // blue
+                                    "delivered" -> Color.Gray         // double grey
+                                    else -> Color.Gray                // single grey
+                                }
+
+                                val tickIcon = when (message.status) {
+                                    "sent" -> Icons.Default.Done      // single tick
+                                    else -> Icons.Default.DoneAll     // double tick
+                                }
+
                                 Icon(
-                                    imageVector = Icons.Default.DoneAll,
-                                    contentDescription = "Read",
-                                    tint = Color(0xFF34B7F1),
+                                    imageVector = tickIcon,
+                                    contentDescription = "Status",
+                                    tint = tickColor,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -658,7 +696,9 @@ fun MessageInputBar(
                 val repliedName = if (repliedMsg.isMe) "You" else "Friend"
                 Surface(
                     color = if (isSystemInDarkTheme()) Color(0xFF1E2930) else Color(0xFFF0F2F5),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Row(modifier = Modifier.height(IntrinsicSize.Min)) {
@@ -669,27 +709,29 @@ fun MessageInputBar(
                                 .background(MaterialTheme.colorScheme.primary)
                         )
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = repliedName, 
-                                    color = MaterialTheme.colorScheme.primary, 
-                                    fontWeight = FontWeight.Bold, 
+                                    text = repliedName,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp
                                 )
                                 Text(
-                                    text = repliedMsg.message ?: "", 
-                                    fontSize = 12.sp, 
-                                    maxLines = 1, 
+                                    text = repliedMsg.message ?: "",
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     color = if (isSystemInDarkTheme()) Color.LightGray else Color.DarkGray
                                 )
                             }
-                            IconButton(onClick = onCancelReply) { 
-                                Icon(Icons.Default.Close, contentDescription = "Cancel Reply") 
+                            IconButton(onClick = onCancelReply) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel Reply")
                             }
                         }
                     }

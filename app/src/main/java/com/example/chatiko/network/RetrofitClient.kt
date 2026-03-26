@@ -7,13 +7,13 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
 
-    private const val BASE_URL = "http://10.63.1.4:3000"
+    private const val BASE_URL = "http://10.63.0.148:3000"
 
     val instance: RegistrationServices by lazy {
 
         // Logging interceptor
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.BASIC
         }
 
         val client = OkHttpClient.Builder()
